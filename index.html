@@ -187,6 +187,24 @@
     .points.cues li.next { border-color: var(--accent); }
     .answer.spec .q-tag { background: transparent; border: 1px dashed var(--line-2); color: var(--muted); }
     .answer.spec .lead, .answer.spec .points { opacity: .72; }
+    :root { --lvl-me: 0; --lvl-them: 0; }
+    @keyframes rise { from { opacity: 0; transform: translateY(10px) scale(.995); } to { opacity: 1; transform: none; } }
+    @keyframes caught { 0% { box-shadow: 0 0 0 0 rgba(201, 227, 111, .55); } 100% { box-shadow: 0 0 0 20px rgba(201, 227, 111, 0); } }
+    @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+    .answer { animation: rise .28s cubic-bezier(.2, .8, .2, 1); position: relative; }
+    .answer.caught { animation: rise .28s cubic-bezier(.2, .8, .2, 1), caught .9s ease-out .05s; }
+    .answer.streaming::before { content: ""; position: absolute; left: 18px; right: 18px; top: 0; height: 2px; border-radius: 2px; background: linear-gradient(90deg, transparent, var(--accent), transparent); background-size: 200% 100%; animation: shimmer 1.1s linear infinite; }
+    body.listening-on .answer { box-shadow: 0 0 calc(var(--lvl-them) * 46px) rgba(201, 227, 111, calc(var(--lvl-them) * .28)); transition: box-shadow .12s linear; }
+    .pulse-ring { transform: scale(calc(1 + var(--lvl-them) * .55 + var(--lvl-me) * .25)); transition: transform .1s linear; }
+    .status .dot { transform: scale(calc(1 + var(--lvl-me) * .8 + var(--lvl-them) * .8)); transition: transform .1s linear; }
+    .learn-row { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 13.5px; }
+    .learn-row:first-of-type { border-top: 0; }
+    .learn-k { color: var(--text-2); }
+    .learn-row > div:first-child { flex: 1; min-width: 0; max-width: 60%; }
+    .learn-v { color: var(--text); font-weight: 600; text-align: right; }
+    .learn-bar { height: 6px; border-radius: 4px; background: var(--line); overflow: hidden; margin-top: 6px; }
+    .learn-bar > span { display: block; height: 100%; background: var(--accent); }
+    .coach-rescue b { color: var(--me); font-weight: 600; }
     .hud { position: sticky; top: -28px; z-index: 6; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 14px; border-radius: 14px; border: 1px solid rgba(155, 184, 245, .35); background: rgba(20, 24, 33, .92); backdrop-filter: blur(8px); box-shadow: 0 10px 30px rgba(0,0,0,.35); font-size: 13px; }
     .hud-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--me); animation: pulse 1.2s infinite; flex-shrink: 0; }
     .hud-time { font-family: var(--mono); font-weight: 650; color: var(--text); min-width: 42px; }
@@ -580,6 +598,8 @@
                   <span><kbd>Space</kbd> 回答对方刚说的</span>
                   <span><kbd>/</kbd> 打字提问</span>
                   <span><kbd>1</kbd>–<kbd>4</kbd> 追问</span>
+                  <span><kbd>R</kbd> 帮我圆回来</span>
+                  <span><kbd>X</kbd> 不是问题</span>
                   <span><kbd>Esc</kbd> 关闭面板</span>
                 </div>
               </div>
@@ -707,6 +727,12 @@
               <button class="btn btn-ghost" id="btnForgetLocal" type="button" hidden title="删除保存在这个浏览器里的资料、设置和记录">清除浏览器里的数据</button>
               <input id="kbImportInput" type="file" accept=".json" hidden />
             </div>
+          </div>
+
+          <div class="card" id="learnCard">
+            <div class="card-title">Cue 对你的了解 <span class="help">（越用越准，只存在这个浏览器里）</span></div>
+            <div id="learnBody"></div>
+            <div class="row" style="margin-top: 10px;"><button class="btn btn-ghost" id="btnLearnReset" type="button">重置学习</button></div>
           </div>
         </div></div>
       </section>
@@ -1666,6 +1692,8 @@
       $("timerText").hidden = !S.listening;
       $("meters").hidden = !S.listening;
       $("listenHint").hidden = !(S.listening && !S.current && document.body.dataset.view === "live");
+      document.body.classList.toggle("listening-on", Boolean(S.listening));
+      if (!S.listening) { document.documentElement.style.setProperty("--lvl-me", "0"); document.documentElement.style.setProperty("--lvl-them", "0"); }
       $("meterSpk").closest(".meter").hidden = !S.spk;
       $("btnAddTab").hidden = !(S.listening && CAN_SHARE_AUDIO && !S.spk && S.source !== "system");
       $("btnStartLabel").textContent = S.listening ? "停止" : "开始";
@@ -1754,7 +1782,7 @@
         u = { id: S.nextId++, ch: ch, text: text, at: now };
         u.textEl = el("div", { class: "utt-text", text: text });
         u.el = el("div", { class: "utt " + whoClass(ch), title: "点击让 AI 回答这句",
-          onclick: function () { answer(u.text, { utt: u }); } },
+          onclick: function () { if (u.ch !== "mic") learnQ(u.text, 1); answer(u.text, { utt: u }); } },
           el("div", { class: "utt-meta" },
             el("span", { class: "who", text: whoLabel(ch) }),
             el("span", { text: fmtClock(new Date(now)) }),
@@ -1772,7 +1800,7 @@
       if (ch !== "mic" && S.autoMode !== "off") {
         if (S.autoTimer) clearTimeout(S.autoTimer);
         const turn = latestTheirTurn();
-        const isQ = looksLikeQuestion(turn);
+        const isQ = isQuestion(turn);
         // Questions: answer almost immediately (and refine if they keep talking).
         // "Every turn" mode: also answer statements once they pause for a moment.
         const delay = isQ ? 60 : (S.autoMode === "turn" && turn.length >= 8 ? 1100 : -1);
@@ -1928,6 +1956,7 @@
         const rms = Math.sqrt(sum / input.length);
         if (meterEl) meterEl.style.transform = "scaleX(" + Math.min(1, rms * 9).toFixed(3) + ")";
         if (meterEl && meterEl.id === "meterMic") logMicLevel(rms);
+        if (meterEl) setLevel(meterEl.id === "meterMic" ? "me" : "them", rms);
         const frameMs = input.length / rate * 1000;
         const copy = new Float32Array(input);
         const threshold = Math.max(0.008, Math.min(0.03, noise * 2.6));
@@ -2219,6 +2248,7 @@
 
       if (!S.mic && !S.spk) return;
       $("statsCard").hidden = true;
+      SPEC.sHit = 0; SPEC.sMiss = 0;
       S.listening = true;
       S.startedAt = Date.now();
       warmUp();
@@ -2329,6 +2359,7 @@
       while (S.pending > 0 && Date.now() - t0 < 3000) await sleep(80);
       const q = latestTheirTurn();
       if (!q) { toast("还没有可以回答的内容。可以在左下角直接输入对方的问题。"); $("composerInput").focus(); return; }
+      if (!isQuestion(q)) learnQ(q, 1);   // Cue missed this one: learn from it
       answer(q);
     }
 
@@ -2371,7 +2402,7 @@
           ? "\nIf [My materials] contain relevant facts, use them exactly; never invent numbers or experiences that are not there."
           : "\n如果【我的资料】里有相关内容，必须使用其中的事实和数字；资料里没有的经历和数字不要编造。";
       }
-      return scen + "\n" + fmt + strict;
+      return scen + "\n" + fmt + strict + styleHints(lang);
     }
 
     function userText(question, hits, extra) {
@@ -2573,7 +2604,13 @@
         } });
         actions.appendChild(mailBtn);
       }
+      if (a.kind === "answer" && a.auto) {
+        actions.appendChild(el("button", { class: "chip", type: "button", title: "这句不是问题：以后类似的话不再自动回答", onclick: function () { notAQuestion(a); } },
+          "不是问题", el("kbd", { text: "X" })));
+      }
       if (a.kind === "answer") {
+        actions.appendChild(el("button", { class: "chip", type: "button", title: "说到一半卡住或说错了：给你一句接下来能说的话", onclick: function () { rescue(a); } },
+          "帮我圆回来", el("kbd", { text: "R" })));
         FOLLOWUPS.forEach(function (f) {
           actions.appendChild(el("button", { class: "chip", type: "button", onclick: function () { followUp(f); } },
             f.label, el("kbd", { text: f.key })));
@@ -2588,7 +2625,7 @@
       } });
       actions.appendChild(copyBtn);
 
-      refs.card = el("article", { class: "answer" + (a.spec ? " spec" : "") },
+      refs.card = el("article", { class: "answer" + (a.spec ? " spec" : "") + (a.auto && !a.caughtShown ? " caught" : "") },
         el("div", { class: "q" },
           el("span", { class: "q-tag", text: a.spec ? "预判中" : (KIND_LABELS[a.kind] || a.followLabel || "对方问") }),
           el("div", { class: "q-text", text: a.question })),
@@ -2602,6 +2639,7 @@
         kbBlock,
         el("div", { class: "answer-foot" }, refs.meta, actions));
       host.appendChild(refs.card);
+      a.caughtShown = true;
       a.refs = refs;
       updateAnswer(a);
       if (a.coach) renderCoach(a);
@@ -2701,6 +2739,7 @@
       if (opts.auto && navigator.vibrate) { try { navigator.vibrate(30); } catch (_) {} }
       // The other side kept talking: replace the earlier draft instead of piling up history.
       if (opts.auto && S.current && S.current.auto && (S.current.spec || q.indexOf(S.current.question) === 0)) {
+        if (S.current.spec && !opts.spec) noteSpec(false);
         S.answers = S.answers.filter(function (x) { return x !== S.current; });
       }
 
@@ -2771,6 +2810,7 @@
     function followUp(f) {
       const base = S.current;
       if (!base) return;
+      noteStyle(f.key);
       answer(base.question, {
         base: base,
         followLabel: f.label,
@@ -3128,6 +3168,8 @@
       if ($("insecureDialog").open || $("micDialog").open || $("drawer").classList.contains("open")) return;
       if (ev.code === "Space") { ev.preventDefault(); answerLatest(); return; }
       if (ev.key === "/") { ev.preventDefault(); $("composerInput").focus(); return; }
+      if ((ev.key === "x" || ev.key === "X") && S.current && S.current.auto && S.current.kind === "answer") { ev.preventDefault(); notAQuestion(S.current); return; }
+      if ((ev.key === "r" || ev.key === "R") && S.current && S.current.kind === "answer") { ev.preventDefault(); rescue(S.current); return; }
       const f = FOLLOWUPS.find(function (x) { return x.key === ev.key; });
       if (f && S.current && S.current.kind === "answer") { ev.preventDefault(); followUp(f); }
     }
@@ -3364,7 +3406,7 @@
       navigator.serviceWorker.register("./sw.js").catch(function () {});
     }
     $("btnForgetLocal").addEventListener("click", function () {
-      idbDo("readwrite", function (st) { st.delete("sessions"); st.delete(VAULT); return st.delete("state"); })
+      idbDo("readwrite", function (st) { st.delete("sessions"); st.delete(VAULT); st.delete("learn"); st.delete("emb"); return st.delete("state"); })
         .then(function () { $("chkRememberKey").checked = false; toast("已清除这个浏览器里保存的资料、设置和 Key（当前页面里的内容不受影响）。"); })
         .catch(function () {});
     });
@@ -3384,6 +3426,7 @@
       document.querySelectorAll(".nav-item").forEach(function (b) { b.classList.toggle("active", b.dataset.nav === v); });
       document.body.dataset.view = v;
       if (v === "history") renderSessions();
+      if (v === "prep" && typeof renderLearn === "function") renderLearn();
     }
 
     function setPane(p) {
@@ -3886,6 +3929,7 @@
         for (let i = 0; i < input.length; i++) sum += input[i] * input[i];
         if (meterEl) meterEl.style.transform = "scaleX(" + Math.min(1, Math.sqrt(sum / input.length) * 9).toFixed(3) + ")";
         if (meterEl && meterEl.id === "meterMic") logMicLevel(Math.sqrt(sum / input.length));
+        if (meterEl) setLevel(meterEl.id === "meterMic" ? "me" : "them", Math.sqrt(sum / input.length));
         const s16 = downsample(new Float32Array(input), rate);
         pending.push(s16); pendingLen += s16.length;
         if (pendingLen >= 800) {   // send every ~50 ms
@@ -3999,6 +4043,7 @@
         else if (/^GOOD\b/i.test(l)) coach.good = true;
       });
       if (!coach.add && !coach.fix && !coach.good) return;
+      if (a.coach && a.coach.rescue) coach.rescue = a.coach.rescue;
       a.coach = coach;
       renderCoach(a);
     }
@@ -4011,9 +4056,10 @@
       if (!c) { box.hidden = true; return; }
       box.hidden = false;
       box.appendChild(el("div", { class: "coach-title", text: "实时提示" }));
+      if (c.rescue) box.appendChild(el("div", { class: "coach-rescue" }, el("b", { text: "接着说：" }), el("span", { class: "u", text: c.rescue })));
       if (c.fix) box.appendChild(el("div", { class: "coach-fix" }, el("b", { text: "纠正：" }), el("span", { class: "u", text: c.fix })));
       if (c.add) box.appendChild(el("div", { class: "coach-add" }, el("b", { text: "补充：" }), el("span", { class: "u", text: c.add })));
-      if (!c.fix && !c.add && c.good) box.appendChild(el("div", { class: "coach-good", text: "很好，要点都说到了。" }));
+      if (!c.fix && !c.add && !c.rescue && c.good) box.appendChild(el("div", { class: "coach-good", text: "很好，要点都说到了。" }));
     }
 
     // ---- Talk-time meter and long-monologue nudge (like sales call coaching tools) ----
@@ -4110,7 +4156,7 @@
     });
 
     // ---- Early drafts: start answering while the other side is still finishing the question ----
-    const SPEC = { timer: null, embLen: 0 };
+    const SPEC = { timer: null, embLen: 0, sHit: 0, sMiss: 0 };
     function normQ(t) { return (t || "").toLowerCase().replace(/[\s.,!?;:，。！？；：、"'“”‘’…-]+/g, ""); }
     function sameQuestion(a, b) {
       const x = normQ(a), y = normQ(b);
@@ -4121,6 +4167,7 @@
     }
     function confirmSpec(a, q) {
       a.spec = false;
+      noteSpec(true);
       a.finalAt = Date.now();
       if (a.refs && a.refs.card) a.refs.card.classList.remove("spec");
       updateAnswer(a);
@@ -4138,18 +4185,18 @@
       if (ch === "mic" || (ch === "room" && S.spk) || S.autoMode === "off" || !S.listening || !$("chkSpec").checked || !aiReady()) return;
       const heard = (mid || "").trim();
       if (heard.length < 6) return;
-      if (looksLikeQuestion(heard) && Math.abs(heard.length - SPEC.embLen) >= 6) { SPEC.embLen = heard.length; semEmbedQuery(heard).catch(function () {}); }
+      if (isQuestion(heard) && Math.abs(heard.length - SPEC.embLen) >= 6) { SPEC.embLen = heard.length; semEmbedQuery(heard).catch(function () {}); }
       SPEC.timer = setTimeout(function () {
         SPEC.timer = null;
         if ((S.liveInterim[ch] || "").trim() !== heard) return;   // they're still talking
-        if (!looksLikeQuestion(heard)) return;
+        if (!isQuestion(heard)) return;
         const last = S.utts[S.utts.length - 1];
         const q = ((last && last.ch !== "mic" ? latestTheirTurn() + " " : "") + heard).trim();
         const cur = S.current;
         if (cur && cur.status === "streaming" && cur.kind !== "answer") return;
         if (cur && cur.auto && sameQuestion(q, cur.question)) return;   // already on it
         answer(q, { auto: true, spec: true });
-      }, 300);
+      }, specDelay());
     }
 
     // ---- Follow-up recap: summary, their questions, commitments, and an email draft ----
@@ -4653,7 +4700,9 @@
         coverage: pts ? Math.round(cov * 100 / pts) : null,
         talk: total && TALK.them ? Math.round(TALK.me * 100 / total) : null,
         fillers: TALK.fill,
-        longest: Math.round(Math.max(HUD.maxTurn, 0))
+        longest: Math.round(Math.max(HUD.maxTurn, 0)),
+        specN: SPEC.sHit + SPEC.sMiss,
+        specHit: SPEC.sHit + SPEC.sMiss ? Math.round(SPEC.sHit * 100 / (SPEC.sHit + SPEC.sMiss)) : 0
       };
     }
     async function showStats() {
@@ -4681,6 +4730,7 @@
       grid.appendChild(tile(m.talk === null ? "—" : m.talk + "%", en ? "you talking" : "你说话占比", el("div", { class: "stat-d", text: en ? "aim for 30–60%" : "建议 30–60%" })));
       grid.appendChild(tile(String(m.fillers), en ? "filler words" : "口头禅", delta(m.fillers, prev && prev.fillers, true, "")));
       grid.appendChild(tile(m.longest ? m.longest + (en ? " s" : " 秒") : "—", en ? "longest turn" : "最长一次发言", delta(m.longest || null, prev && prev.longest, true, en ? " s" : " 秒")));
+      if (m.specN) grid.appendChild(tile(m.specHit + "%", en ? "early drafts kept" : "预判命中", el("div", { class: "stat-d", text: en ? m.specN + " predictions" : m.specN + " 次预判" })));
       box.appendChild(grid);
       let tip = "";
       if (m.longest > 75) tip = en ? "Next time: land each answer within ~45 s, then hand it back with a question." : "下次试试：每次回答控制在 45 秒内，说完用一个问题把话递回去。";
@@ -4691,6 +4741,184 @@
       box.hidden = false;
       saveSessionLocal();
     }
+
+
+    // =====================================================================
+    // 15a5. On-device learning: personal question model, answer style, prediction timing
+    // =====================================================================
+    // A small logistic-regression model runs in the page and learns from what you do:
+    // tapping a line to answer it (yes, that was a question), "Not a question" (no), and Space on a line
+    // Cue missed. It starts from the built-in rules and adapts to how the people you talk with phrase things.
+    var LEARN = { w: {}, b: -1.1, n: 0, pos: 0, neg: 0, style: { "1": 0, "2": 0, "3": 0, "4": 0 }, spec: { hit: 0, miss: 0 } };
+    let learnSaveTimer = null;
+    function learnSave() {
+      clearTimeout(learnSaveTimer);
+      learnSaveTimer = setTimeout(function () {
+        idbDo("readwrite", function (st) { return st.put(LEARN, "learn"); }).catch(function () {});
+        renderLearn();
+      }, 400);
+    }
+    async function learnLoad() {
+      try {
+        const saved = await idbDo("readonly", function (st) { return st.get("learn"); });
+        if (saved && saved.w) {
+          LEARN = Object.assign(LEARN, saved);
+          LEARN.style = Object.assign({ "1": 0, "2": 0, "3": 0, "4": 0 }, saved.style || {});
+          LEARN.spec = Object.assign({ hit: 0, miss: 0 }, saved.spec || {});
+        }
+      } catch (_) {}
+      renderLearn();
+    }
+    function qFeatures(text) {
+      const t = (text || "").toLowerCase().replace(/\s+/g, " ").trim().slice(-160);
+      const f = ["bias2"];
+      if (looksLikeQuestion(t)) f.push("re");
+      if (/[?？]\s*$/.test(t)) f.push("qmark");
+      const words = t.match(/[a-z']+/g) || [];
+      words.slice(0, 3).forEach(function (w, i) { f.push("s" + i + ":" + w); });
+      for (let i = 0; i < words.length; i++) { f.push("w:" + words[i]); if (i + 1 < words.length) f.push("b:" + words[i] + "_" + words[i + 1]); }
+      const zh = t.replace(/[^\u4e00-\u9fff]/g, "");
+      for (let i = 0; i + 1 < zh.length; i++) f.push("z:" + zh.slice(i, i + 2));
+      if (zh.length) f.push("end:" + zh.slice(-1), "end2:" + zh.slice(-2), "beg:" + zh.slice(0, 2));
+      if (words.length) f.push("endw:" + words[words.length - 1]);
+      f.push("len:" + Math.min(6, Math.floor(t.length / 12)));
+      return Array.from(new Set(f));
+    }
+    function qWeight(k) { return LEARN.w[k] !== undefined ? LEARN.w[k] : (k === "re" ? 2.2 : (k === "qmark" ? 0.6 : 0)); }
+    function qProb(text) {
+      let z = LEARN.b;
+      qFeatures(text).forEach(function (k) { z += qWeight(k); });
+      return 1 / (1 + Math.exp(-z));
+    }
+    function isQuestion(text) {
+      const s2 = (text || "").trim();
+      return s2.length >= 4 && qProb(s2) >= 0.5;
+    }
+    function learnQ(text, y) {
+      const feats = qFeatures(text);
+      for (let epoch = 0; epoch < 3; epoch++) {
+        // Each lesson moves this sentence's score by ~0.6 per pass, spread over its features, so one
+        // example can't override the built-in rules for unrelated sentences that merely share a word.
+        const p = qProb(text);
+        const g = (y - p) * 0.6 / feats.length;
+        feats.forEach(function (k) { if (k !== "re" && k !== "qmark") LEARN.w[k] = Math.max(-3, Math.min(3, qWeight(k) + g)); });
+      }
+      LEARN.n++;
+      if (y) LEARN.pos++; else LEARN.neg++;
+      const keys = Object.keys(LEARN.w);
+      if (keys.length > 6000) keys.slice(0, keys.length - 6000).forEach(function (k) { delete LEARN.w[k]; });
+      learnSave();
+    }
+    function notAQuestion(a) {
+      learnQ(a.question, 0);
+      if (S.abort && S.current === a) { try { S.abort.abort(); } catch (_) {} }
+      S.answers = S.answers.filter(function (x) { return x !== a; });
+      S.lastAutoQ = a.question;
+      if (S.current === a) {
+        S.current = null;
+        mountAnswer(null);
+        renderHistory();
+        refreshStatus();
+      }
+      toast(S.uiLang === "en" ? "Got it. Cue won't auto-answer lines like that." : "记住了，以后类似的话不会再自动回答。");
+    }
+
+    // ---- Answer style learned from the follow-ups you pick ----
+    function noteStyle(key) { LEARN.style[key] = (LEARN.style[key] || 0) + 1; learnSave(); }
+    function stylePrefs() {
+      const st = LEARN.style, out = [];
+      if (st["3"] >= 3 && st["3"] > st["1"] * 1.5) out.push("short");
+      else if (st["1"] >= 3 && st["1"] > st["3"] * 1.5) out.push("long");
+      if (st["2"] >= 3) out.push("example");
+      if (st["4"] >= 3) out.push("english");
+      return out;
+    }
+    function styleHints(lang) {
+      const p = stylePrefs();
+      if (!p.length) return "";
+      const en = lang === "en";
+      const lines = [];
+      if (p.indexOf("short") !== -1) lines.push(en ? "This person usually asks for shorter answers: keep line 1 under 15 words and points very tight." : "这个用户经常要求更短：第1行不超过25字，要点更精炼。");
+      if (p.indexOf("long") !== -1) lines.push(en ? "This person usually asks for more detail: add specifics to each point." : "这个用户经常要求展开：每个要点多给一点具体做法。");
+      if (p.indexOf("example") !== -1) lines.push(en ? "This person often asks for examples: include one concrete example." : "这个用户经常要例子：回答里带一个具体例子。");
+      return "\n" + lines.join("\n");
+    }
+
+    // ---- Prediction timing that tunes itself from how often early drafts are kept ----
+    function noteSpec(hit) {
+      if (hit) { LEARN.spec.hit++; SPEC.sHit++; } else { LEARN.spec.miss++; SPEC.sMiss++; }
+      learnSave();
+    }
+    function specDelay() {
+      const n = LEARN.spec.hit + LEARN.spec.miss;
+      if (n < 5) return 300;
+      const rate = LEARN.spec.hit / n;
+      return Math.round(Math.min(650, Math.max(180, 450 - (rate - 0.5) * 600)));
+    }
+
+    // ---- "Rescue me": one sentence to say next when you're stuck or slipped ----
+    async function rescue(a) {
+      if (!aiReady()) { toast("需要先设置 AI 模型。"); openDrawer("model"); return; }
+      const said = (a.spoken || "").trim() || (S.utts.filter(function (u) { return u.ch === "mic"; }).slice(-2).map(function (u) { return u.text; }).join(" "));
+      a.coach = Object.assign({}, a.coach || {}, { rescue: S.uiLang === "en" ? "…" : "…" });
+      renderCoach(a);
+      const mats = a.hits.map(function (h) { return h.text; }).join("\n---\n").slice(0, 2000);
+      let out = "";
+      try {
+        await streamAnswer(
+          "I am in the middle of answering in a live conversation and I'm stuck or just made a mistake. Give ONE natural sentence I can say next, out loud, to recover: " +
+          "if I said something wrong, correct it gracefully using my materials; otherwise bridge back to the strongest point I haven't made yet. " +
+          "Max 30 words (or 50 Chinese characters). Same language as what I said (if nothing said yet, same language as the question). No preface, no quotes.",
+          "[Question]\n" + a.question + "\n\n[Suggested answer]\n" + answerPlainText(a) + (mats ? "\n\n[My materials]\n" + mats : "") + "\n\n[What I have said so far]\n" + (said || "(nothing yet)"),
+          new AbortController().signal,
+          function (d) { out += d; a.coach.rescue = out.trim(); renderCoach(a); });
+      } catch (e) { a.coach.rescue = ""; renderCoach(a); toast(errMsg(e)); }
+    }
+
+    // ---- Audio-reactive UI ----
+    const LVL = { me: 0, them: 0, t: 0 };
+    function setLevel(which, rms) {
+      LVL[which] = Math.max(LVL[which] * 0.6, Math.min(1, rms * 9));
+      const now = performance.now();
+      if (now - LVL.t < 50) return;
+      LVL.t = now;
+      const root = document.documentElement.style;
+      root.setProperty("--lvl-me", LVL.me.toFixed(2));
+      root.setProperty("--lvl-them", LVL.them.toFixed(2));
+    }
+
+    // ---- What Cue has learned about you (Prep page) ----
+    function renderLearn() {
+      const body = $("learnBody");
+      if (!body) return;
+      const en = S.uiLang === "en";
+      const row = function (k, v, barPct) {
+        const r = el("div", { class: "learn-row" }, el("div", null, el("div", { class: "learn-k", text: k }),
+          barPct === undefined ? null : el("div", { class: "learn-bar" }, el("span", { style: "width:" + Math.round(barPct) + "%" }))),
+          el("div", { class: "learn-v u", text: v }));
+        return r;
+      };
+      const mem = S.docs.find(function (d) { return d.name === MEMORY_DOC; });
+      const memN = mem ? (mem.text.match(/^Q[:：]/gm) || []).length : 0;
+      const n = LEARN.spec.hit + LEARN.spec.miss;
+      const prefs = stylePrefs().map(function (p) {
+        return { short: en ? "shorter answers" : "更短的回答", long: en ? "more detail" : "更详细", example: en ? "concrete examples" : "带具体例子", english: en ? "often switches to English" : "常切换英文" }[p];
+      });
+      body.replaceChildren(
+        row(en ? "Question detection, trained by your taps" : "问题识别：从你的操作中学习",
+          en ? LEARN.n + " lessons (" + LEARN.pos + " yes / " + LEARN.neg + " no)" : LEARN.n + " 次（" + LEARN.pos + " 次是问题 / " + LEARN.neg + " 次不是）", Math.min(100, LEARN.n * 4)),
+        row(en ? "Answer style" : "回答风格", prefs.length ? prefs.join(en ? ", " : "、") : (en ? "still learning" : "还在观察")),
+        row(en ? "Early-draft hit rate → prediction delay" : "预判命中率 → 抢跑延迟",
+          n ? Math.round(LEARN.spec.hit * 100 / n) + "% · " + specDelay() + " ms" : (en ? "no data yet · 300 ms" : "暂无数据 · 300 ms"), n ? LEARN.spec.hit * 100 / n : 0),
+        row(en ? "Your own answers remembered" : "记住的你的回答", String(memN)),
+        row(en ? "Passages searchable by meaning" : "可按意思检索的资料段落", SEM.vecs.size + " / " + S.chunks.length)
+      );
+    }
+    $("btnLearnReset").addEventListener("click", function () {
+      LEARN = { w: {}, b: -1.1, n: 0, pos: 0, neg: 0, style: { "1": 0, "2": 0, "3": 0, "4": 0 }, spec: { hit: 0, miss: 0 } };
+      learnSave();
+      toast(S.uiLang === "en" ? "Learning reset." : "已重置学习。");
+    });
 
     // =====================================================================
     // 15c. Interface language (中文 / English)
@@ -4883,6 +5111,11 @@
       ["正在评估…", "Evaluating…"], ["评估失败：", "Evaluation failed: "], ["得分 ", "Score "], ["已评估", "Evaluated"],
       ["这个浏览器不支持语音识别：请在设置里填 Gemini Key，或直接打字。", "This browser has no speech recognition: add a Gemini key in Settings, or type."],
       ["练习 · ", "Practice · "],
+      ["Cue 对你的了解", "What Cue has learned about you"], ["（越用越准，只存在这个浏览器里）", " (gets better with use; stored only in this browser)"],
+      ["重置学习", "Reset learning"], ["不是问题", "Not a question"], ["帮我圆回来", "Rescue me"], ["接着说：", "Say next: "],
+      ["这句不是问题：以后类似的话不再自动回答", "Not a question: Cue won't auto-answer similar lines"],
+      ["说到一半卡住或说错了：给你一句接下来能说的话", "Stuck or slipped mid-answer: get one sentence to say next"],
+      ["需要先设置 AI 模型。", "Set up an AI model first."],
       ["让 Cue 认识你的声音", "Let Cue learn your voice"],
       ["只用麦克风时，Cue 靠音量区分你和对方：你离麦克风最近，声音最大。点开始后，用平时说话的音量读下面这句话（约 4 秒）。", "With the microphone only, Cue tells you and the other side apart by loudness: you're closest to the mic. Press Start and read the line below at your normal volume (about 4 s)."],
       ["我在用 Cue，这是我平时说话的音量，对方的声音会比我小一些。", "I'm using Cue, and this is how loudly I normally speak."],
@@ -5147,6 +5380,7 @@
     refreshMicDevices();
     probe();
     vaultLoad().then(function () { semLoad().then(scheduleSemIndex); });
+    learnLoad();
     extUi();
     setInterval(probe, 8000);
     if (/[?&]demo=1/.test(window.location.search)) setTimeout(runDemo, 300);
