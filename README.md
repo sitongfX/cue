@@ -20,6 +20,10 @@ It's a single web page: no server, no build step. Everything runs in your browse
 - **Several questions at once**: if they ask two or three things in one breath, each one becomes a chip that's crossed off as you answer it, and the AI answers them in order.
 - **Next point to say**: once you start answering, points you've covered are crossed out and the next one is highlighted, updated as you speak.
 - **Live coaching while you speak**: Cue compares what you're saying with the question and your materials, and shows *Add:* (the most important missing point) or *Fix:* (something you got wrong), about a second after you pause.
+- **Live speaking coach (while you talk)**: a small bar appears the moment you start speaking, with your turn timer, pace (chars/min or wpm), filler count and one instant tip: wrap up after ~45 s, slow down, sound more certain, add a number, or the next point to cover. Tips are computed locally, so they update every half second with no model call; AI *Add/Fix* coaching is layered on top.
+- **Remembers how you answered**: after each answer, the question and what you actually said are saved to your materials ("My past answers"). The next similar question shows your own wording instantly, so Cue gets more personal the more you use it.
+- **Session stats**: when you stop, a scorecard shows answers, speed after they finished, points covered, talk share, filler words and longest turn, with arrows comparing to your previous session and one thing to try next time.
+- **Tell you and them apart with the mic only (experimental)**: read one line so Cue learns how loud you are; quieter voices (speakers, across the table) are labelled as the other side.
 - **Talk-time and filler meter**: shows how much of the conversation you've been talking, counts filler words (um, you know, 嗯, 那个), and nudges you gently.
 - **Your materials, not made-up facts**: paste product docs, project notes or FAQs. The AI is told to use only your facts and numbers.
 - **Search by meaning, with instant prepared answers**: with a Gemini key, every passage is embedded once (`gemini-embedding-001`, cached in your browser), and the question is embedded while it's still being asked. Paraphrased questions still find the right passage, and when it matches a Q&A in your materials the prepared answer appears immediately, before the AI responds. Keyword search is the fallback.
@@ -33,7 +37,7 @@ It's a single web page: no server, no build step. Everything runs in your browse
 - **Follow-up after the call**: when you stop, Cue writes a summary, the other side's questions, commitments (who / what / when) and a ready-to-send follow-up email, saved to History.
 - **Remember key (opt-in)**: keep your API key in this browser, encrypted with a non-extractable AES-GCM key. Uncheck to delete it.
 - **History**: every session is saved in your browser and can be exported as Markdown.
-- **Installable** (PWA) on desktop and phone, with an always-on-top floating window on desktop Chrome.
+- **Installable** (PWA) on desktop and phone: *Install* adds Cue as its own app window with a dock/taskbar or home-screen icon, and the app shell works offline. An always-on-top floating window is available on desktop Chrome.
 
 ## Getting started
 

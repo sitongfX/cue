@@ -187,6 +187,30 @@
     .points.cues li.next { border-color: var(--accent); }
     .answer.spec .q-tag { background: transparent; border: 1px dashed var(--line-2); color: var(--muted); }
     .answer.spec .lead, .answer.spec .points { opacity: .72; }
+    .hud { position: sticky; top: -28px; z-index: 6; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 14px; border-radius: 14px; border: 1px solid rgba(155, 184, 245, .35); background: rgba(20, 24, 33, .92); backdrop-filter: blur(8px); box-shadow: 0 10px 30px rgba(0,0,0,.35); font-size: 13px; }
+    .hud-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--me); animation: pulse 1.2s infinite; flex-shrink: 0; }
+    .hud-time { font-family: var(--mono); font-weight: 650; color: var(--text); min-width: 42px; }
+    .hud-chip { padding: 2px 9px; border-radius: 999px; border: 1px solid var(--line-2); color: var(--text-2); font-size: 12px; white-space: nowrap; }
+    .hud-chip.good { border-color: rgba(201, 227, 111, .45); color: var(--accent); }
+    .hud-chip.warn { border-color: rgba(240, 180, 110, .55); color: #f3c38b; }
+    .hud-chip.bad { border-color: rgba(240, 134, 110, .6); color: var(--danger); }
+    .hud-tip { flex: 1 1 220px; min-width: 0; font-size: calc(15px * var(--scale)); font-weight: 600; color: var(--text); }
+    .hud-tip.warn { color: #f3c38b; } .hud-tip.bad { color: var(--danger); } .hud-tip.good { color: var(--accent); }
+    .hud-bar { flex-basis: 100%; height: 3px; border-radius: 3px; background: var(--line); overflow: hidden; }
+    .hud-bar > span { display: block; height: 100%; width: 0; background: var(--me); transition: width .4s linear, background .4s; }
+    .stats { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); padding: 18px 20px; }
+    .stats-title { font-weight: 650; font-size: 15px; display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+    .stats-title span { font-size: 12px; color: var(--muted); font-weight: 400; }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-top: 14px; }
+    .stat { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--raised); }
+    .stat-v { font-size: 24px; font-weight: 700; letter-spacing: -.3px; color: var(--text); }
+    .stat-l { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .stat-d { font-size: 11.5px; margin-top: 4px; color: var(--muted); }
+    .stat-d.up { color: var(--accent); } .stat-d.down { color: var(--danger); }
+    .stats-tip { margin-top: 12px; font-size: 13.5px; color: var(--text-2); }
+    .voice-level { height: 10px; border-radius: 6px; background: var(--line); overflow: hidden; margin-top: 14px; }
+    .voice-level > span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .08s linear; }
+    .voice-line { margin-top: 12px; padding: 12px 14px; border-radius: 12px; background: var(--raised); font-size: 16px; color: var(--text); }
     .listening { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; padding: 9vh 12px 0; color: var(--muted); }
     .pulse-ring { width: 76px; height: 76px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); animation: ring 1.8s ease-out infinite; }
     .pulse-ring svg { width: 30px; height: 30px; }
@@ -560,6 +584,17 @@
                 </div>
               </div>
 
+              <div class="hud" id="hud" hidden>
+                <span class="hud-dot"></span>
+                <span class="hud-time u" id="hudTime">0:00</span>
+                <span class="hud-chip u" id="hudPace"></span>
+                <span class="hud-chip u" id="hudFill"></span>
+                <span class="hud-tip u" id="hudTip"></span>
+                <div class="hud-bar"><span id="hudBar"></span></div>
+              </div>
+
+              <div class="stats" id="statsCard" hidden></div>
+
               <div class="listening" id="listenHint" hidden>
                 <div class="pulse-ring"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></div>
                 <div class="listen-title">正在听…</div>
@@ -821,6 +856,10 @@
           <span class="help" id="micTestMsg">戴耳机开会效果最好：对方的声音不会被麦克风重复收进来。</span>
         </div>
         <div class="field">
+          <span class="label">区分我和对方（只用麦克风时，实验功能）</span>
+          <div class="row"><button class="btn" id="btnVoiceCal" type="button">让 Cue 认识我的声音</button><span class="help" id="voiceState">未设置</span></div>
+        </div>
+        <div class="field">
           <span class="label">说话的语言</span>
           <select class="select" id="spokenLang">
             <option value="zh">中文</option>
@@ -885,6 +924,13 @@
         </label>
         <label class="switch">
           <div>
+            <div class="label">记住我说过的回答</div>
+            <div class="help">你每次回答后，把“问题 + 你实际怎么说的”存进资料库。下次被问到类似问题，先显示你上次的说法。只存在这个浏览器里。</div>
+          </div>
+          <input id="chkMemory" type="checkbox" checked />
+        </label>
+        <label class="switch">
+          <div>
             <div class="label">按意思检索资料</div>
             <div class="help">换个说法问也能找到你的资料，资料库里有现成答案时立刻显示。需要 Gemini Key。</div>
           </div>
@@ -923,6 +969,19 @@
   </aside>
 
   <!-- ================= Blocked / insecure origin dialog ================= -->
+  <dialog id="voiceDialog">
+    <h3>让 Cue 认识你的声音</h3>
+    <p>只用麦克风时，Cue 靠音量区分你和对方：你离麦克风最近，声音最大。点开始后，用平时说话的音量读下面这句话（约 4 秒）。</p>
+    <div class="voice-line" id="voiceLine">我在用 Cue，这是我平时说话的音量，对方的声音会比我小一些。</div>
+    <div class="voice-level"><span id="voiceLevel"></span></div>
+    <p id="voiceMsg">只在这个浏览器里记住一个音量数值，不保存录音。</p>
+    <div class="row" style="margin-top: 18px; justify-content: flex-end; gap: 8px;">
+      <button class="btn" id="btnVoiceForget" type="button">清除</button>
+      <button class="btn" id="btnVoiceClose" type="button">关闭</button>
+      <button class="btn btn-primary" id="btnVoiceGo" type="button">开始</button>
+    </div>
+  </dialog>
+
   <dialog id="tabDialog">
     <h3>让 Cue 也听到对方</h3>
     <p>戴耳机开会时，麦克风听不到对方。把会议标签页的声音交给 Cue，就能分清谁在说话、更快回答。</p>
@@ -1287,7 +1346,8 @@
         background: $("bgInput").value, strictKb: S.strictKb ? "1" : "0", micDevice: S.micDevice,
         uiLang: S.uiLang, spokenLang: $("spokenLang").value, fastMic: $("chkFastMic").checked ? "1" : "0",
         translate: $("translateSel").value, liveStt: $("chkLiveStt").checked ? "1" : "0", coach: $("chkCoach").checked ? "1" : "0",
-        spec: $("chkSpec").checked ? "1" : "0", recap: $("chkRecap").checked ? "1" : "0", semantic: $("chkSemantic").checked ? "1" : "0"
+        spec: $("chkSpec").checked ? "1" : "0", recap: $("chkRecap").checked ? "1" : "0", semantic: $("chkSemantic").checked ? "1" : "0",
+        memory: $("chkMemory").checked ? "1" : "0", voiceMe: S.voiceMe ? String(S.voiceMe) : ""
       };
     }
 
@@ -1308,6 +1368,8 @@
       if (st.spec) $("chkSpec").checked = st.spec === "1";
       if (st.recap) $("chkRecap").checked = st.recap === "1";
       if (st.semantic) $("chkSemantic").checked = st.semantic === "1";
+      if (st.memory) $("chkMemory").checked = st.memory === "1";
+      if (typeof st.voiceMe === "string") { S.voiceMe = parseFloat(st.voiceMe) || 0; voiceStateUi(); }
       if (st.uiLang && st.uiLang !== S.uiLang) setUiLang(st.uiLang, true);
       if (st.lang) $("langSel").value = st.lang;
       if (st.length) $("lengthSel").value = st.length;
@@ -1666,6 +1728,12 @@
       const text = (rawText || "").replace(/\s+/g, " ").trim();
       // Mic-only: a statement that echoes the answer on screen is you answering, not a new turn from them.
       if (ch === "room" && looksLikeYouAnswering(text)) ch = "mic";
+      if (ch === "room" && S.voiceMe) {
+        const nowP = performance.now();
+        if (classifyVoice(Math.max(VOICE.lastFinal, nowP - 8000), nowP) === "me") ch = "mic";
+        VOICE.lastFinal = nowP;
+      }
+      if (ch === "mic") hudMine(text, true); else hudReset();
       if (!text || text.length < 2) return null;
       if (HALLUCINATIONS.some(function (h) { return text.indexOf(h) !== -1; })) return null;
       if (isEcho(ch, text)) return null;
@@ -1859,6 +1927,7 @@
         for (let i = 0; i < input.length; i++) sum += input[i] * input[i];
         const rms = Math.sqrt(sum / input.length);
         if (meterEl) meterEl.style.transform = "scaleX(" + Math.min(1, rms * 9).toFixed(3) + ")";
+        if (meterEl && meterEl.id === "meterMic") logMicLevel(rms);
         const frameMs = input.length / rate * 1000;
         const copy = new Float32Array(input);
         const threshold = Math.max(0.008, Math.min(0.03, noise * 2.6));
@@ -2053,7 +2122,8 @@
         showInterim(interim);
         if (ch === "room" && S.spk) ch = "mic";
         if (interim && ch !== "spk" && !looksLikeQuestion(interim)) markCoveredPoints(interim, true);
-        if (ch !== "mic") { S.liveInterim[ch] = interim; if (interim) maybeSpeculate(ch, interim); }
+        if (interim && isMeNow(ch)) hudMine(interim, false);
+        else if (ch !== "mic") { S.liveInterim[ch] = interim; if (interim) maybeSpeculate(ch, interim); }
       };
       rec.onend = function () {
         if (S.listening && S.recog === rec) { try { rec.start(); } catch (_) {} }
@@ -2120,7 +2190,7 @@
 
       if (wantMic) {
         try {
-          const audioOpts = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+          const audioOpts = { echoCancellation: true, noiseSuppression: true, autoGainControl: !S.voiceMe };
           if (S.micDevice) audioOpts.deviceId = { exact: S.micDevice };
           let ms;
           try {
@@ -2148,6 +2218,7 @@
       }
 
       if (!S.mic && !S.spk) return;
+      $("statsCard").hidden = true;
       S.listening = true;
       S.startedAt = Date.now();
       warmUp();
@@ -2235,6 +2306,9 @@
       stopExtPlayback();
       S.liveInterim = {};
       if (S.timerHandle) clearInterval(S.timerHandle);
+      if (S.current) commitMemory(S.current);
+      hudReset();
+      showStats();
       if (S.utts.length >= 4 && $("chkRecap").checked && aiReady()) setTimeout(function () { recap(true); }, 400);
       else if (S.utts.length >= 4) toast("已停止。点「跟进」生成摘要和跟进邮件，点「复盘」看看哪里可以答得更好。", 6000);
       archiveSession();
@@ -2620,6 +2694,7 @@
       const q = (question || "").trim();
       if (!q) return;
       if (S.abort) { try { S.abort.abort(); } catch (_) {} }
+      if (S.current) commitMemory(S.current);
       $("ready").hidden = true;
       if (document.body.dataset.view !== "live") showView("live");
       setPane("stage");
@@ -2708,6 +2783,7 @@
     const PREP_DOC = "预演 · 可能被问的问题";
 
     function kbHeadline(hits) {
+      if (hits.some(function (h) { return h.doc === MEMORY_DOC; })) return "你上次是这么答的";
       if (hits.some(function (h) { return h.doc === PREP_DOC; })) return "你演练过这道题";
       if (hits.some(function (h) { return h.doc.indexOf("复盘") === 0; })) return "你复盘过类似的问题";
       return "来自你的资料";
@@ -3199,7 +3275,7 @@
     if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
       navigator.mediaDevices.addEventListener("devicechange", refreshMicDevices);
     }
-    ["scenarioSel", "langSel", "lengthSel", "bgInput", "chkStrict", "modelInput", "spokenLang", "chkFastMic", "translateSel", "chkLiveStt", "chkCoach", "chkSpec", "chkRecap", "chkSemantic"].forEach(function (id) {
+    ["scenarioSel", "langSel", "lengthSel", "bgInput", "chkStrict", "modelInput", "spokenLang", "chkFastMic", "translateSel", "chkLiveStt", "chkCoach", "chkSpec", "chkRecap", "chkSemantic", "chkMemory"].forEach(function (id) {
       $(id).addEventListener("change", persistKb);
     });
     $("scenarioSel").addEventListener("change", function () {
@@ -3444,6 +3520,7 @@
         title: firstQ.text.slice(0, 80),
         turns: S.utts.length,
         answers: S.answers.filter(function (a) { return a.text; }).length,
+        metrics: S.lastMetrics || null,
         markdown: buildMarkdown()
       };
       try {
@@ -3463,7 +3540,7 @@
       $("sessListCard").hidden = false;
       list.forEach(function (r) {
         box.appendChild(el("button", { class: "hist-item", type: "button", onclick: function () { showSession(r); } },
-          el("span", { class: "hist-q", text: r.at + " · " + r.turns + " 句对话 · " + r.answers + " 个回答" }),
+          el("span", { class: "hist-q", text: r.at + " · " + r.turns + " 句对话 · " + r.answers + " 个回答" + (r.metrics && r.metrics.speed !== null ? " · " + fmtSpeed(r.metrics.speed) : "") }),
           el("span", { class: "hist-a", text: r.title })));
       });
     }
@@ -3774,7 +3851,8 @@
             S.liveInterim[ch] = mid;
             showInterim(interimPrefix(ch) + mid);
             if (ch !== "spk" && !looksLikeQuestion(mid)) markCoveredPoints(mid, true);
-            if (ch !== "mic") maybeSpeculate(ch, mid);
+            if (isMeNow(ch)) hudMine(mid, false);
+            else if (ch !== "mic") maybeSpeculate(ch, mid);
           }
         };
         sock.onclose = function () {
@@ -3807,6 +3885,7 @@
         let sum = 0;
         for (let i = 0; i < input.length; i++) sum += input[i] * input[i];
         if (meterEl) meterEl.style.transform = "scaleX(" + Math.min(1, Math.sqrt(sum / input.length) * 9).toFixed(3) + ")";
+        if (meterEl && meterEl.id === "meterMic") logMicLevel(Math.sqrt(sum / input.length));
         const s16 = downsample(new Float32Array(input), rate);
         pending.push(s16); pendingLen += s16.length;
         if (pendingLen >= 800) {   // send every ~50 ms
@@ -4360,6 +4439,259 @@
     });
     window.postMessage({ source: "cue-page", type: "ping" }, window.origin === "null" ? "*" : window.origin);
 
+
+    // =====================================================================
+    // 15a4. Live speaking coach HUD, voice calibration, answer memory, session stats
+    // =====================================================================
+    // ---- Loudness log of the microphone (used to tell you and the other side apart in mic-only mode) ----
+    const VOICE = { t: new Float64Array(2400), v: new Float32Array(2400), n: 0, lastFinal: 0 };
+    function logMicLevel(rms) {
+      const i = VOICE.n % 2400;
+      VOICE.t[i] = performance.now(); VOICE.v[i] = rms; VOICE.n++;
+    }
+    function levelsBetween(from, to) {
+      const out = [];
+      const count = Math.min(VOICE.n, 2400);
+      for (let k = 0; k < count; k++) {
+        const i = (VOICE.n - 1 - k) % 2400;
+        if (VOICE.t[i] < from) break;
+        if (VOICE.t[i] <= to) out.push(VOICE.v[i]);
+      }
+      return out;
+    }
+    function pct(arr, p) { if (!arr.length) return 0; const a = arr.slice().sort(function (x, y) { return x - y; }); return a[Math.min(a.length - 1, Math.floor(p * a.length))]; }
+    function classifyVoice(from, to) {
+      if (!S.voiceMe) return "";
+      const all = levelsBetween(from, to);
+      if (all.length < 4) return "";
+      const floor = Math.max(0.004, pct(levelsBetween(to - 20000, to), 0.15));
+      const voiced = all.filter(function (x) { return x > floor * 2.2 && x > 0.006; });
+      if (voiced.length < 3) return "";
+      const med = pct(voiced, 0.6);
+      if (med >= S.voiceMe * 0.55) return "me";
+      if (med <= S.voiceMe * 0.4) return "them";
+      return "";
+    }
+    function isMeNow(ch) {
+      if (ch === "mic") return true;
+      if (ch !== "room" || !S.voiceMe) return false;
+      const now = performance.now();
+      return classifyVoice(now - 1500, now) === "me";
+    }
+    function voiceStateUi() {
+      const el2 = $("voiceState");
+      if (!el2) return;
+      el2.textContent = S.voiceMe
+        ? (S.uiLang === "en" ? "Calibrated. Louder, closer speech is marked as you." : "已设置：离麦克风近、声音大的会标为「我」")
+        : (S.uiLang === "en" ? "Not set" : "未设置");
+    }
+    async function calibrateVoice() {
+      const btn = $("btnVoiceGo");
+      btn.disabled = true;
+      $("voiceMsg").textContent = S.uiLang === "en" ? "Listening… read the line above." : "正在听…请读上面这句话。";
+      let ms;
+      try {
+        const opts = { echoCancellation: true, noiseSuppression: true, autoGainControl: false };
+        if (S.micDevice) opts.deviceId = { exact: S.micDevice };
+        ms = await navigator.mediaDevices.getUserMedia({ audio: opts });
+      } catch (e) { btn.disabled = false; openMicDialog(e); return; }
+      const AC = window.AudioContext || window.webkitAudioContext;
+      const ctx = new AC();
+      const src = ctx.createMediaStreamSource(ms);
+      const an = ctx.createAnalyser();
+      an.fftSize = 2048;
+      src.connect(an);
+      const buf = new Float32Array(an.fftSize);
+      const vals = [];
+      const t0 = performance.now();
+      await new Promise(function (resolve) {
+        (function tick() {
+          an.getFloatTimeDomainData(buf);
+          let sum = 0;
+          for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+          const rms = Math.sqrt(sum / buf.length);
+          vals.push(rms);
+          $("voiceLevel").style.width = Math.min(100, rms * 900).toFixed(0) + "%";
+          if (performance.now() - t0 < 4200) requestAnimationFrame(tick); else resolve();
+        })();
+      });
+      ms.getTracks().forEach(function (t) { t.stop(); });
+      try { ctx.close(); } catch (_) {}
+      $("voiceLevel").style.width = "0%";
+      btn.disabled = false;
+      const floor = Math.max(0.003, pct(vals, 0.15));
+      const voiced = vals.filter(function (x) { return x > floor * 2.5 && x > 0.008; });
+      if (voiced.length < vals.length * 0.25) {
+        $("voiceMsg").textContent = S.uiLang === "en" ? "Didn't hear enough speech. Try again a little louder." : "没听到足够的说话声，请再试一次，稍微大声一点。";
+        return;
+      }
+      S.voiceMe = Math.round(pct(voiced, 0.5) * 10000) / 10000;
+      voiceStateUi();
+      persistKb();
+      $("voiceMsg").textContent = S.uiLang === "en"
+        ? "Done. Restart listening to apply. Quieter voices (speakers, across the table) will be marked as them."
+        : "好了。重新开始收音后生效：明显比你小声的（外放、桌子对面）会标为「对方」。";
+    }
+    $("btnVoiceCal").addEventListener("click", function () { const d = $("voiceDialog"); if (d.showModal) d.showModal(); else d.setAttribute("open", ""); });
+    $("btnVoiceGo").addEventListener("click", calibrateVoice);
+    $("btnVoiceClose").addEventListener("click", function () { $("voiceDialog").close(); });
+    $("btnVoiceForget").addEventListener("click", function () { S.voiceMe = 0; voiceStateUi(); persistKb(); $("voiceMsg").textContent = S.uiLang === "en" ? "Cleared." : "已清除。"; });
+
+    // ---- Live speaking HUD: instant, local tips while you are talking ----
+    const HUD = { start: 0, last: 0, text: "", interim: "", fill: 0, timer: null, maxTurn: 0 };
+    const HEDGE_RE = /(可能吧|大概吧|应该吧|我觉得吧|好像|也许|差不多吧|\bmaybe\b|\bprobably\b|\bi guess\b|\bkind of\b|\bsort of\b|\bi think maybe\b)/gi;
+    function hudMine(text, final) {
+      if (!S.listening || !text) return;
+      const now = Date.now();
+      if (!HUD.start || now - HUD.last > 4000) { HUD.start = now; HUD.text = ""; HUD.fill = 0; }
+      HUD.last = now;
+      if (final) {
+        HUD.text += " " + text;
+        HUD.interim = "";
+        HUD.fill += (text.match(FILLER_RE) || []).length;
+      } else HUD.interim = text;
+      renderHud();
+      if (!HUD.timer) HUD.timer = setInterval(renderHud, 500);
+    }
+    function hudReset() {
+      if (HUD.start) HUD.maxTurn = Math.max(HUD.maxTurn, (HUD.last - HUD.start) / 1000);
+      HUD.start = 0; HUD.interim = "";
+      if (HUD.timer) { clearInterval(HUD.timer); HUD.timer = null; }
+      const h = $("hud");
+      if (h) h.hidden = true;
+    }
+    function nextPointText() {
+      const a = S.current;
+      if (!a || a.kind !== "answer" || !a.text || a.status === "streaming") return "";
+      const pts = parseAnswer(a.text).points;
+      for (let i = 0; i < pts.length; i++) if (!(a.covered && a.covered[i])) return pts[i];
+      return "";
+    }
+    function hudTip(secs, pace, isZh, fill, hedges, all) {
+      const en = S.uiLang === "en";
+      const a = S.current;
+      if (a && a.coach && a.coach.fix) return { c: "bad", t: (en ? "Fix: " : "纠正：") + a.coach.fix };
+      if (secs > 75) return { c: "bad", t: en ? "Wrap up: one-line summary, then ask what they think." : "该收尾了：一句话总结，再问问对方怎么看。" };
+      if (secs > 45) return { c: "warn", t: en ? "Getting long. Start landing your point." : "说得有点长了，准备收个尾。" };
+      if (fill >= 3) return { c: "warn", t: en ? "Slow down a touch; fewer “um”s." : "放慢一点，少用「嗯」「那个」。" };
+      if ((isZh && pace > 300) || (!isZh && pace > 190)) return { c: "warn", t: en ? "A bit fast. Pause between points." : "语速有点快，要点之间停一下。" };
+      if (hedges >= 2) return { c: "warn", t: en ? "Sound more certain: drop “maybe / I guess”." : "说得更肯定些：少用「可能」「大概」。" };
+      const next = nextPointText();
+      if (a && a.coach && a.coach.add) return { c: "", t: (en ? "Add: " : "补充：") + a.coach.add };
+      if (next) return { c: "", t: (en ? "Next: " : "下一点：") + next };
+      if (secs > 20 && !/\d|[一二三四五六七八九十百千万]+[个%倍年月天周]/.test(all)) return { c: "", t: en ? "Add a number or a concrete example." : "加一个具体的数字或例子。" };
+      return { c: "good", t: en ? "Good pace. Keep going." : "节奏很好，继续。" };
+    }
+    function renderHud() {
+      const h = $("hud");
+      if (!S.listening || !HUD.start || Date.now() - HUD.last > 5000 || document.body.dataset.view !== "live") {
+        if (HUD.start && Date.now() - HUD.last > 5000) hudReset(); else h.hidden = true;
+        return;
+      }
+      const secs = Math.max(1, (HUD.last - HUD.start) / 1000 + (Date.now() - HUD.last) / 1000 * 0.2);
+      const all = (HUD.text + " " + HUD.interim).trim();
+      const zh = (all.match(/[\u4e00-\u9fff]/g) || []).length;
+      const words = (all.match(/[a-z']+/gi) || []).length;
+      const isZh = zh >= words;
+      const pace = Math.round((isZh ? zh : words) / Math.max(2, (HUD.last - HUD.start) / 1000) * 60);
+      const fill = HUD.fill + (HUD.interim.match(FILLER_RE) || []).length;
+      const hedges = (all.match(HEDGE_RE) || []).length;
+      const en = S.uiLang === "en";
+      h.hidden = false;
+      $("hudTime").textContent = Math.floor(secs / 60) + ":" + String(Math.floor(secs % 60)).padStart(2, "0");
+      const paceOk = isZh ? (pace >= 140 && pace <= 300) : (pace >= 100 && pace <= 190);
+      $("hudPace").textContent = (en ? "Pace " : "语速 ") + pace + (isZh ? (en ? " chars/min" : " 字/分") : " wpm");
+      $("hudPace").className = "hud-chip u " + ((HUD.last - HUD.start) < 3000 ? "" : (paceOk ? "good" : "warn"));
+      $("hudFill").textContent = (en ? "Fillers " : "口头禅 ") + fill;
+      $("hudFill").className = "hud-chip u " + (fill >= 3 ? "warn" : "good");
+      const tip = hudTip(secs, pace, isZh, fill, hedges, all);
+      $("hudTip").textContent = tip.t;
+      $("hudTip").className = "hud-tip u " + tip.c;
+      const bar = $("hudBar");
+      bar.style.width = Math.min(100, secs / 75 * 100).toFixed(0) + "%";
+      bar.style.background = secs > 75 ? "var(--danger)" : (secs > 45 ? "#f3c38b" : "var(--me)");
+    }
+
+    // ---- Answer memory: what you actually said becomes your own prepared answer next time ----
+    const MEMORY_DOC = "我说过的回答";
+    function commitMemory(a) {
+      if (!a || a.memSaved || a.kind !== "answer" || !$("chkMemory").checked) return;
+      const said = (a.spoken || "").replace(/\s+/g, " ").trim();
+      if (said.replace(/\s/g, "").length < 24) return;
+      a.memSaved = true;
+      const q = a.question.replace(/\s+/g, " ").trim().slice(0, 240);
+      const doc = S.docs.find(function (d) { return d.name === MEMORY_DOC; });
+      const blocks = doc ? doc.text.split(/\n{2,}/) : [];
+      const kept = blocks.filter(function (b) {
+        const m = b.match(/^Q[:：]\s*(.+)/);
+        return !(m && sameQuestion(m[1], q));
+      });
+      kept.push("Q: " + q + "\nA: " + said.slice(-700));
+      addDoc(MEMORY_DOC, kept.slice(-200).join("\n\n"));
+    }
+
+    // ---- End-of-session stats with a comparison to last time ----
+    function fmtSpeed(v) {
+      const en = S.uiLang === "en";
+      if (v === null || v === undefined) return "—";
+      return v <= 0.05 ? (en ? "early" : "提前就绪") : v.toFixed(1) + (en ? " s" : " 秒");
+    }
+    function sessionMetrics() {
+      const ans = S.answers.filter(function (a) { return a.kind === "answer" && a.status === "done"; });
+      const lags = ans.filter(function (a) { return a.finalAt && a.firstAt; }).map(function (a) { return Math.max(0, (a.firstAt - a.finalAt) / 1000); });
+      let pts = 0, cov = 0;
+      ans.forEach(function (a) {
+        if (!a.talking) return;
+        const n = parseAnswer(a.text).points.length;
+        pts += n;
+        cov += Object.keys(a.covered || {}).filter(function (k) { return a.covered[k] && +k < n; }).length;
+      });
+      const total = TALK.me + TALK.them;
+      return {
+        answers: ans.length,
+        speed: lags.length ? lags.reduce(function (x, y) { return x + y; }, 0) / lags.length : null,
+        coverage: pts ? Math.round(cov * 100 / pts) : null,
+        talk: total && TALK.them ? Math.round(TALK.me * 100 / total) : null,
+        fillers: TALK.fill,
+        longest: Math.round(Math.max(HUD.maxTurn, 0))
+      };
+    }
+    async function showStats() {
+      const m = sessionMetrics();
+      S.lastMetrics = m;
+      if (!m.answers && !m.talk) return;
+      let prev = null;
+      try { (await loadSessions()).some(function (r) { if (r.metrics && r.id !== S.sessId) { prev = r.metrics; return true; } return false; }); } catch (_) {}
+      const en = S.uiLang === "en";
+      const box = $("statsCard");
+      box.replaceChildren();
+      const delta = function (cur, old, lowerBetter, unit) {
+        if (cur === null || old === null || old === undefined) return el("div", { class: "stat-d", text: en ? "first time" : "首次记录" });
+        const d = cur - old;
+        if (Math.abs(d) < 0.05) return el("div", { class: "stat-d", text: en ? "same as last time" : "和上次一样" });
+        const better = lowerBetter ? d < 0 : d > 0;
+        return el("div", { class: "stat-d " + (better ? "up" : "down"), text: (d > 0 ? "↑ " : "↓ ") + (Math.round(Math.abs(d) * 10) / 10) + unit + (en ? " vs last" : " 比上次") });
+      };
+      const tile = function (v, label, d) { return el("div", { class: "stat" }, el("div", { class: "stat-v u", text: v }), el("div", { class: "stat-l", text: label }), d); };
+      box.appendChild(el("div", { class: "stats-title" }, en ? "This conversation" : "本场表现", el("span", { text: en ? "Saved to History" : "已存进「记录」" })));
+      const grid = el("div", { class: "stats-grid" });
+      grid.appendChild(tile(String(m.answers), en ? "answers" : "次回答", el("div", { class: "stat-d" })));
+      grid.appendChild(tile(fmtSpeed(m.speed), en ? "after they finished" : "对方说完到出字", delta(m.speed, prev && prev.speed, true, en ? " s" : " 秒")));
+      grid.appendChild(tile(m.coverage === null ? "—" : m.coverage + "%", en ? "points covered" : "要点覆盖", delta(m.coverage, prev && prev.coverage, false, "%")));
+      grid.appendChild(tile(m.talk === null ? "—" : m.talk + "%", en ? "you talking" : "你说话占比", el("div", { class: "stat-d", text: en ? "aim for 30–60%" : "建议 30–60%" })));
+      grid.appendChild(tile(String(m.fillers), en ? "filler words" : "口头禅", delta(m.fillers, prev && prev.fillers, true, "")));
+      grid.appendChild(tile(m.longest ? m.longest + (en ? " s" : " 秒") : "—", en ? "longest turn" : "最长一次发言", delta(m.longest || null, prev && prev.longest, true, en ? " s" : " 秒")));
+      box.appendChild(grid);
+      let tip = "";
+      if (m.longest > 75) tip = en ? "Next time: land each answer within ~45 s, then hand it back with a question." : "下次试试：每次回答控制在 45 秒内，说完用一个问题把话递回去。";
+      else if (m.fillers >= 8) tip = en ? "Next time: pause silently instead of “um”; it sounds more confident." : "下次试试：想词时停顿一下，不用「嗯」填空，听起来更有把握。";
+      else if (m.coverage !== null && m.coverage < 50) tip = en ? "Next time: glance at the highlighted Next point before you finish." : "下次试试：收尾前看一眼高亮的「下一点」，把要点说全。";
+      else if (m.answers) tip = en ? "Nice. Your answers were saved to memory, so similar questions will be instant next time." : "不错。你的回答已存进资料库，下次被问到类似问题会直接显示你的说法。";
+      if (tip) box.appendChild(el("div", { class: "stats-tip", text: tip }));
+      box.hidden = false;
+      saveSessionLocal();
+    }
+
     // =====================================================================
     // 15c. Interface language (中文 / English)
     // UI strings are written in Chinese; in English mode every visible UI text node and
@@ -4551,6 +4883,16 @@
       ["正在评估…", "Evaluating…"], ["评估失败：", "Evaluation failed: "], ["得分 ", "Score "], ["已评估", "Evaluated"],
       ["这个浏览器不支持语音识别：请在设置里填 Gemini Key，或直接打字。", "This browser has no speech recognition: add a Gemini key in Settings, or type."],
       ["练习 · ", "Practice · "],
+      ["让 Cue 认识你的声音", "Let Cue learn your voice"],
+      ["只用麦克风时，Cue 靠音量区分你和对方：你离麦克风最近，声音最大。点开始后，用平时说话的音量读下面这句话（约 4 秒）。", "With the microphone only, Cue tells you and the other side apart by loudness: you're closest to the mic. Press Start and read the line below at your normal volume (about 4 s)."],
+      ["我在用 Cue，这是我平时说话的音量，对方的声音会比我小一些。", "I'm using Cue, and this is how loudly I normally speak."],
+      ["只在这个浏览器里记住一个音量数值，不保存录音。", "Only a single loudness number is kept in this browser; no recording is saved."],
+      ["清除", "Clear"], ["关闭", "Close"], ["开始", "Start"],
+      ["区分我和对方（只用麦克风时，实验功能）", "Tell me and them apart (mic only, experimental)"],
+      ["让 Cue 认识我的声音", "Let Cue learn my voice"], ["未设置", "Not set"],
+      ["记住我说过的回答", "Remember how I answered"],
+      ["你每次回答后，把“问题 + 你实际怎么说的”存进资料库。下次被问到类似问题，先显示你上次的说法。只存在这个浏览器里。", "After each answer, the question and what you actually said are saved to your materials. Next time a similar question comes up, your own wording shows first. Stored only in this browser."],
+      ["你上次是这么答的", "How you answered last time"], ["我说过的回答", "My past answers"],
       ["正在听…", "Listening…"],
       ["对方一提问，回答会立刻出现在这里。也可以按 Space，或点对话里的任意一句。", "As soon as they ask something, the answer appears here. You can also press Space or tap any line in the conversation."],
       ["先说", "Say first"],
