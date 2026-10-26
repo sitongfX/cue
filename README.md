@@ -15,7 +15,9 @@ It's a single web page: no server, no build step. Everything runs in your browse
 ## Features
 
 - **Live transcription of both sides**: your microphone plus the other side's audio from a meeting tab (Chrome on desktop). On phones, the microphone hears everyone in the room.
-- **Automatic answers**: when the other side asks a question, an answer starts streaming within about a second. No hotkey needed (Space also works).
+- **Automatic answers**: when the other side asks a question (with or without a question mark), an answer starts streaming right away. No hotkey needed; Space also works and uses the words heard so far.
+- **Live coaching while you speak**: Cue compares what you're saying with the question and your materials, and shows *Add:* (the most important missing point) or *Fix:* (something you got wrong), about a second after you pause.
+- **Talk-time meter**: shows how much of the conversation you've been talking and nudges you if you've been going for a while.
 - **Your materials, not made-up facts**: paste product docs, project notes or FAQs. Matching passages appear instantly, and the AI is told to use only your facts and numbers.
 - **Prep → Practice → Live → Review**
   - *Prep*: generate the 8 questions you're most likely to get and your best answers.
@@ -39,13 +41,16 @@ It's a single web page: no server, no build step. Everything runs in your browse
 
 | Channel | Engine | Notes |
 |---|---|---|
-| Your microphone | Browser speech recognition (*Fast recognition*, on by default) | Words appear as you speak; one language at a time (set *Spoken language*). |
-| Your microphone, mixed languages | Gemini (`gemini-3.5-flash-lite`) | Handles Chinese, English and mixed speech; about 1.2–1.5 s per phrase. |
-| The other side (meeting audio) | Gemini | Audio is split at natural pauses (or every ~2 s), and phrases are transcribed in parallel. |
+| The other side (meeting audio) | **Gemini Live streaming** (`gemini-3.5-transcribe-live`) | Audio is streamed continuously over a WebSocket; words appear while they talk and the final sentence about 1 s after they pause. Chinese and English are detected automatically. |
+| Your microphone | Browser speech recognition (*Fast recognition*, on by default) | Words appear as you speak; one language at a time (set *Spoken language*). Turn it off or choose *mixed* to use Gemini Live instead. |
+| Without a Gemini key | Browser speech recognition | Chrome versions that can recognize an audio track also transcribe the meeting tab (experimental); otherwise only the microphone works. |
+| Fallback | Gemini (`gemini-3.5-flash-lite`) per phrase | Used automatically if streaming can't connect. |
+
+Why the other side's audio needs a cloud engine: the browser's built-in recognizer has traditionally only listened to the default microphone. Audio captured from a meeting tab is raw sound data, so it has to be sent to an engine that accepts audio, such as Gemini.
 
 ## Privacy
 
-- API keys live only in the page's memory and are never stored or sent anywhere except the provider you chose.
+- API keys live only in the page's memory and are never stored or sent anywhere except the provider you chose. (The streaming connection passes the key in the WebSocket URL, which is how the Gemini Live API authenticates browsers.)
 - Materials, settings and history are stored in your browser (IndexedDB). *Prep → Clear data in this browser* removes them.
 - Audio is sent only to the transcription provider you configured.
 

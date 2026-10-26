@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob: mediastream:; connect-src 'self' http://127.0.0.1:* http://localhost:* https://generativelanguage.googleapis.com https://api.deepseek.com https://api.siliconflow.cn https://open.bigmodel.cn https://dashscope.aliyuncs.com;" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob: mediastream:; connect-src 'self' http://127.0.0.1:* http://localhost:* https://generativelanguage.googleapis.com wss://generativelanguage.googleapis.com https://api.deepseek.com https://api.siliconflow.cn https://open.bigmodel.cn https://dashscope.aliyuncs.com;" />
   <title>Cue · 实时回答提示</title>
   <meta name="theme-color" content="#0d0e0c" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -198,6 +198,13 @@
     .lead.prepared { color: var(--text-2); }
     .lead.prepared::before { content: "你准备过的回答"; display: block; font-size: 11.5px; font-weight: 600; color: var(--accent); letter-spacing: .4px; margin-bottom: 4px; }
     html[lang="en"] .lead.prepared::before { content: "Your prepared answer"; }
+    .coach { margin-top: 14px; border: 1px solid rgba(155, 184, 245, .35); background: rgba(155, 184, 245, .08); border-radius: 12px; padding: 10px 14px; display: flex; flex-direction: column; gap: 4px; font-size: calc(14px * var(--scale)); }
+    .coach-title { font-size: 11.5px; font-weight: 600; color: var(--me); letter-spacing: .4px; }
+    .coach-add b { color: var(--accent); font-weight: 600; }
+    .coach-fix b { color: var(--danger); font-weight: 600; }
+    .coach-good { color: var(--ok); }
+    .talk { margin-left: 8px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--muted); }
+    .talk.warn { color: var(--them); }
     .utt-tr { font-size: 13px; color: var(--muted); border-left: 2px solid var(--line-2); padding-left: 8px; margin-top: 3px; }
     .chip.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
     .composer .chip { flex-shrink: 0; }
@@ -417,7 +424,7 @@
 
         <section class="col col-convo">
           <div class="col-head">
-            <span class="col-title">对话</span>
+            <span class="col-title">对话 <span class="talk u" id="talkRatio"></span></span>
             <div class="col-tools">
               <button class="btn btn-ghost" id="btnSummary" type="button" title="根据目前的对话生成纪要">纪要</button>
               <button class="btn btn-ghost" id="btnReview" type="button" title="复盘：哪里答得好、哪里可以更好，并把改进后的回答存进资料库">复盘</button>
@@ -762,6 +769,13 @@
           </div>
           <input id="chkFastMic" type="checkbox" checked />
         </label>
+        <label class="switch">
+          <div>
+            <div class="label">流式识别（最快）</div>
+            <div class="help">用 Gemini Live 边听边转写：对方停顿约 1 秒就出字，中英文自动识别。需要 Gemini Key。</div>
+          </div>
+          <input id="chkLiveStt" type="checkbox" checked />
+        </label>
         <div class="field">
           <span class="label">什么时候自动回答</span>
           <select class="select" id="autoMode">
@@ -796,6 +810,13 @@
             <option value="cue">提示卡 · 一句开场 + 几个关键词（不用照念，说出来更自然）</option>
           </select>
         </div>
+        <label class="switch">
+          <div>
+            <div class="label">说话时实时提示补充</div>
+            <div class="help">你回答时，Cue 对照问题和你的资料，提示漏掉的要点或说错的地方。</div>
+          </div>
+          <input id="chkCoach" type="checkbox" checked />
+        </label>
         <div class="field">
           <span class="label">实时翻译对方的话</span>
           <select class="select" id="translateSel">
@@ -951,7 +972,7 @@
     // =====================================================================
     const PROVIDERS = {
       gemini: { name: "Google Gemini", desc: "一个 Key 同时搞定转写和回答", tag: "推荐", model: "gemini-3.5-flash-lite",
-        keyHelp: "以 AIza 开头，在 aistudio.google.com 免费获取。", stt: true },
+        keyHelp: "以 AIza 或 AQ. 开头，在 aistudio.google.com 免费获取。", stt: true },
       siliconflow: { name: "硅基流动", desc: "国内直连 · 免费转写 + DeepSeek-V3", tag: "国内首选", model: "deepseek-ai/DeepSeek-V3",
         keyHelp: "以 sk- 开头，在 cloud.siliconflow.cn 获取。同时提供免费的 SenseVoice 语音转写。", stt: true,
         url: "https://api.siliconflow.cn/v1/chat/completions" },
@@ -1157,7 +1178,7 @@
         scenario: $("scenarioSel").value, lang: $("langSel").value, length: $("lengthSel").value,
         background: $("bgInput").value, strictKb: S.strictKb ? "1" : "0", micDevice: S.micDevice,
         uiLang: S.uiLang, spokenLang: $("spokenLang").value, fastMic: $("chkFastMic").checked ? "1" : "0",
-        translate: $("translateSel").value
+        translate: $("translateSel").value, liveStt: $("chkLiveStt").checked ? "1" : "0", coach: $("chkCoach").checked ? "1" : "0"
       };
     }
 
@@ -1172,6 +1193,8 @@
       if (st.spokenLang) $("spokenLang").value = st.spokenLang;
       if (st.fastMic) $("chkFastMic").checked = st.fastMic === "1";
       if (st.translate) $("translateSel").value = st.translate;
+      if (st.liveStt) $("chkLiveStt").checked = st.liveStt === "1";
+      if (st.coach) $("chkCoach").checked = st.coach === "1";
       if (st.uiLang && st.uiLang !== S.uiLang) setUiLang(st.uiLang, true);
       if (st.lang) $("langSel").value = st.lang;
       if (st.length) $("lengthSel").value = st.length;
@@ -1407,8 +1430,9 @@
     function sttLabel() {
       const r = sttRoute();
       if (r === "siliconflow") return "硅基流动 SenseVoice（云端，支持麦克风和电脑声音）";
-      if (r === "gemini") return "Gemini（云端，支持麦克风和电脑声音）";
+      if (r === "gemini") return liveSttUsable() ? "Gemini Live 流式识别（最快，支持麦克风和电脑声音，中英文自动识别）" : "Gemini（云端，支持麦克风和电脑声音）";
       if (r === "server") return "本机服务转写（支持麦克风和电脑声音）";
+      if (trackRecognitionUsable()) return "浏览器内置识别（麦克风和电脑声音都可以，免 Key；电脑声音为实验功能）";
       return "浏览器内置识别（只能识别麦克风）。要转写电脑里对方的声音，请填 Gemini 或硅基流动的 Key。";
     }
 
@@ -1436,7 +1460,7 @@
         setStep("stepAudio", "warn", "这个网站不允许网页用麦克风 · 点「开始」查看换哪个地址打开，或先用左下角打字提问");
       } else if (!window.isSecureContext || !navigator.mediaDevices) {
         setStep("stepAudio", "warn", "当前网址不能使用麦克风 · 点「开始」查看解决办法，或先用左下角打字提问");
-      } else if (S.source !== "inperson" && sttRoute() === "browser") {
+      } else if (S.source !== "inperson" && sttRoute() === "browser" && !trackRecognitionUsable()) {
         setStep("stepAudio", "warn", SOURCES[S.source] + " · 转写电脑声音需要 Gemini 或硅基流动 Key");
       } else {
         setStep("stepAudio", "done", SOURCES[S.source]);
@@ -1475,8 +1499,9 @@
     const HALLUCINATIONS = ["字幕由", "请不吝点赞", "订阅转发", "Thank you for watching", "Thanks for watching", "无清晰人声", "（无）", "(无)"];
     const QUESTION_RE = [
       /[?？]/,
-      /(什么|怎么|如何|为什么|为啥|请问|能不能|可不可以|有没有|是不是|多少|哪些|哪个|区别|介绍一下|讲一下|说说|谈谈|解释|举个例子|你觉得|你认为|吗$|呢$)/,
-      /\b(what|how|why|when|where|who|which|can you|could you|would you|do you|did you|are you|is there|tell me|walk me through|explain|describe)\b/i
+      /(什么|怎么|如何|为什么|为啥|请问|能不能|能否|可不可以|可以.{0,6}吗|有没有|是不是|多少|多久|几个|哪些|哪个|哪里|区别|介绍一下|讲一下|说说|谈谈|解释|举个例子|你觉得|你认为|吗[。！.!]?$|呢[。！.!]?$)/,
+      /^(what|how|why|when|where|who|which|whose|can|could|would|will|should|shall|do|does|did|is|are|was|were|have|has|may|might|any)\b/i,
+      /\b(what's|how's|can you|could you|would you|do you|did you|are you|is there|are there|tell me|walk me through|explain|describe|any thoughts|thoughts on|what about|how about)\b/i
     ];
     function looksLikeQuestion(t) {
       const s = (t || "").trim();
@@ -1521,7 +1546,8 @@
       if (!text || text.length < 2) return null;
       if (HALLUCINATIONS.some(function (h) { return text.indexOf(h) !== -1; })) return null;
       if (isEcho(ch, text)) return null;
-      if (ch === "mic") markCoveredPoints(text);
+      if (ch === "mic") { markCoveredPoints(text); scheduleCoach(); }
+      noteTalk(ch, text);
 
       $("convoEmpty").hidden = true;
       const now = Date.now();
@@ -1759,7 +1785,12 @@
       return c.signal;
     }
 
-    function apiError(service, status) {
+    function apiError(service, status, detail) {
+      const e = apiErrorBase(service, status);
+      if (detail) e.message += "（" + detail + "）";
+      return e;
+    }
+    function apiErrorBase(service, status) {
       if (status === 400) return new Error(service + "：请求不被接受（模型名可能不对，可在设置里换一个模型）");
       if (status === 401 || status === 403) return new Error(service + "：Key 无效或没有权限，请检查 Key");
       if (status === 404) return new Error(service + "：这个 Key 用不了当前模型，请在设置里换一个模型");
@@ -1785,7 +1816,7 @@
         ] }],
         generationConfig: { temperature: 0, maxOutputTokens: 400 }
       }, timeoutSignal(15000));
-      if (!resp.ok) throw apiError("Gemini 转写", resp.status);
+      if (!resp.ok) throw apiError("Gemini 转写", resp.status, await errDetail(resp));
       const data = await resp.json();
       const parts = (((data.candidates || [])[0] || {}).content || {}).parts || [];
       return tidyTranscript(parts.map(function (p) { return p.text || ""; }).join(""));
@@ -1826,6 +1857,7 @@
 
     async function onSegment(ch, wav) {
       if (ch !== "spk" && S.fastMic) return;   // the browser's live recognizer already handles the microphone
+      if (ch === "spk" && S.trackRecs.length) return;   // the browser recognizer is transcribing the shared tab
       const route = sttRoute();
       if (route === "browser") {
         if (ch === "spk" && !S.warnedNoSpkStt) {
@@ -1941,9 +1973,17 @@
           if (!audio.length) {
             toast("没有收到声音：分享时请选择会议所在的标签页，并打开「分享标签页音频」。", 7000);
           } else {
-            S.spk = createCapture(new MediaStream(audio), $("meterSpk"),
-              function (wav) { onSegment("spk", wav); },
-              function () { S.spk = null; if (!S.mic && S.listening) stopListening(); });
+            const spkStream = new MediaStream(audio);
+            const spkEnded = function () { S.spk = null; if (!S.mic && S.listening) stopListening(); };
+            const spkSegments = function (st) {
+              return createCapture(st, $("meterSpk"), function (wav) { onSegment("spk", wav); }, spkEnded);
+            };
+            if (liveSttUsable()) {
+              S.spk = createLiveTranscriber("spk", spkStream, $("meterSpk"), spkEnded, function (st) { S.spk = spkSegments(st); });
+            } else {
+              S.spk = spkSegments(spkStream);
+              if (sttRoute() === "browser" && trackRecognitionUsable()) startTrackRecognition("spk", audio[0]);
+            }
           }
         } catch (_) {
           toast("已取消分享电脑声音" + (wantMic ? "，只使用麦克风。" : "。"));
@@ -1963,11 +2003,16 @@
             ms = await navigator.mediaDevices.getUserMedia({ audio: audioOpts });
           }
           refreshMicDevices();
-          const ch = micChannel();
-          S.mic = createCapture(ms, $("meterMic"),
-            function (wav) { onSegment(ch, wav); },
-            function () { S.mic = null; if (!S.spk && S.listening) stopListening(); });
+          // Without the other side's audio, everything the mic hears may be them: let it trigger answers.
+          const ch = (S.source === "inperson" || !S.spk) ? "room" : "mic";
+          const micEnded = function () { S.mic = null; if (!S.spk && S.listening) stopListening(); };
+          const micSegments = function (st) {
+            return createCapture(st, $("meterMic"), function (wav) { onSegment(ch, wav); }, micEnded);
+          };
           S.fastMic = fastMicUsable();
+          S.mic = (!S.fastMic && liveSttUsable())
+            ? createLiveTranscriber(ch, ms, $("meterMic"), micEnded, function (st) { S.mic = micSegments(st); })
+            : micSegments(ms);
           if (sttRoute() === "browser" || S.fastMic) startRecognition(ch);
         } catch (e) {
           openMicDialog(e);
@@ -2053,9 +2098,11 @@
       const rec = S.recog;
       S.recog = null;
       if (rec) { try { rec.stop(); } catch (_) {} }
+      stopTrackRecognition();
       if (S.mic) S.mic.stop();
       if (S.spk) S.spk.stop();
       S.mic = null; S.spk = null;
+      S.liveInterim = {};
       if (S.timerHandle) clearInterval(S.timerHandle);
       if (S.utts.length >= 4) toast("已停止。点左上方「复盘」看看哪里可以答得更好，好的回答会存进资料库。", 6000);
       archiveSession();
@@ -2066,6 +2113,9 @@
     }
 
     async function answerLatest() {
+      ["spk", "room"].forEach(function (c) {
+        if (S.liveInterim[c]) { addUtterance(c, S.liveInterim[c]); S.liveInterim[c] = ""; showInterim(""); }
+      });
       if (S.mic) S.mic.flush();
       if (S.spk) S.spk.flush();
       const t0 = Date.now();
@@ -2159,7 +2209,7 @@
         contents: [{ role: "user", parts: [{ text: user }] }],
         generationConfig: { temperature: 0.4, maxOutputTokens: 900 }
       }, signal);
-      if (!resp.ok || !resp.body) throw apiError("Gemini", resp.status);
+      if (!resp.ok || !resp.body) throw apiError("Gemini", resp.status, await errDetail(resp));
       await readStream(resp, function (line) {
         if (line.indexOf("data:") !== 0) return;
         try {
@@ -2176,7 +2226,7 @@
         body: JSON.stringify({ model: model, stream: true, temperature: 0.4, max_tokens: 900,
           messages: [{ role: "system", content: sys }, { role: "user", content: user }] })
       });
-      if (!resp.ok || !resp.body) throw apiError(PROVIDERS[S.provider].name, resp.status);
+      if (!resp.ok || !resp.body) throw apiError(PROVIDERS[S.provider].name, resp.status, await errDetail(resp));
       await readStream(resp, function (line) {
         if (line.indexOf("data:") !== 0) return;
         const d = line.slice(5).trim();
@@ -2196,7 +2246,7 @@
           options: { num_ctx: 4096, num_predict: 420, temperature: 0.4 },
           messages: [{ role: "system", content: sys }, { role: "user", content: user }] })
       });
-      if (!resp.ok || !resp.body) throw apiError(PROVIDERS[S.provider].name, resp.status);
+      if (!resp.ok || !resp.body) throw apiError(PROVIDERS[S.provider].name, resp.status, await errDetail(resp));
       await readStream(resp, function (line) {
         try {
           const j = JSON.parse(line);
@@ -2279,6 +2329,7 @@
         text: prepared || (a.kind === "summary" ? "正在整理纪要…" : "正在思考…") });
       refs.points = el("ul", { class: "points" + (a.cue ? " cues" : "") });
       refs.raw = el("div", { class: "raw", hidden: true });
+      refs.coach = el("div", { class: "coach", hidden: true });
       refs.meta = el("span", { class: "answer-meta" });
       refs.needsAi = el("div", { class: "needs-ai", hidden: true },
         el("span", { text: a.hits.length ? "以上是资料库里匹配到的内容。设置 AI 模型后，会把它变成一句可以直接说的话。" : "设置 AI 模型后，这里会出现可以直接说出口的回答。" }),
@@ -2322,11 +2373,13 @@
         refs.lead,
         refs.points,
         refs.raw,
+        refs.coach,
         refs.needsAi,
         el("div", { class: "answer-foot" }, refs.meta, actions));
       host.appendChild(refs.card);
       a.refs = refs;
       updateAnswer(a);
+      if (a.coach) renderCoach(a);
     }
 
     function updateAnswer(a) {
@@ -2454,6 +2507,7 @@
       updateAnswer(a);
       refreshStatus();
       if (a.status === "done" && opts.onDone) opts.onDone(a);
+      if (a.status === "done" && a.spoken) scheduleCoach();   // you started answering before it finished
     }
 
     function followUp(f) {
@@ -2689,7 +2743,7 @@
       const val = $("keyInput").value.trim();
       if (!val) { toast("请先粘贴 API Key。"); return; }
       let p = S.provider;
-      if (/^AIza/.test(val) && p !== "gemini") { p = "gemini"; S.provider = p; S.model = PROVIDERS.gemini.model; }
+      if (/^(AIza|AQ\.)/.test(val) && p !== "gemini") { p = "gemini"; S.provider = p; S.model = PROVIDERS.gemini.model; }
       S.keys[p] = val;
       $("keyInput").value = "";
       warmedAt = 0;
@@ -2903,7 +2957,7 @@
     if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
       navigator.mediaDevices.addEventListener("devicechange", refreshMicDevices);
     }
-    ["scenarioSel", "langSel", "lengthSel", "bgInput", "chkStrict", "modelInput", "spokenLang", "chkFastMic", "translateSel"].forEach(function (id) {
+    ["scenarioSel", "langSel", "lengthSel", "bgInput", "chkStrict", "modelInput", "spokenLang", "chkFastMic", "translateSel", "chkLiveStt", "chkCoach"].forEach(function (id) {
       $(id).addEventListener("change", persistKb);
     });
     $("scenarioSel").addEventListener("change", function () {
@@ -2937,6 +2991,7 @@
       Object.keys(sttQueues).forEach(function (k) { sttQueues[k].items.forEach(function (it) { it.text = ""; }); });
       S.utts.forEach(function (u) { if (u.el) u.el.remove(); });
       S.utts = []; S.answers = []; S.current = null; S.lastAutoQ = "";
+      TALK.me = 0; TALK.them = 0; TALK.run = 0; updateTalk();
       $("answerHost").replaceChildren();
       $("convoEmpty").hidden = false;
       $("ready").hidden = S.listening;
@@ -3384,6 +3439,272 @@
     });
 
     // =====================================================================
+    // 15d. Streaming transcription (Gemini Live), browser transcription of computer
+    //      audio, live speaking coach, talk-time meter, API error details
+    // =====================================================================
+    const LIVE_STT_MODEL = "gemini-3.5-transcribe-live";
+    const LIVE_URL = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent";
+    S.liveInterim = {};
+    S.trackRecs = [];
+
+    function liveSttUsable() {
+      return Boolean(S.keys.gemini) && $("chkLiveStt").checked && typeof WebSocket === "function";
+    }
+
+    // Chrome can run its speech recognizer on any audio track (e.g. a shared meeting tab),
+    // which transcribes the other side for free, without an API key.
+    function trackRecognitionUsable() {
+      const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+      return Boolean(Rec && typeof Rec.available === "function");
+    }
+
+    async function errDetail(resp) {
+      try {
+        const j = await resp.clone().json();
+        const m = (j && j.error && (j.error.message || j.error.status)) || "";
+        return String(m).split("\n")[0].slice(0, 160);
+      } catch (_) { return ""; }
+    }
+
+    function interimPrefix(ch) { return ch === "spk" ? (S.uiLang === "en" ? "Them: " : "对方：") : ""; }
+
+    // Streams 16 kHz PCM to Gemini Live and receives text while the person is still talking.
+    // Falls back to segment-based transcription if the connection can't be established.
+    function createLiveTranscriber(ch, stream, meterEl, onEnded, onFallback) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      let ctx;
+      try { ctx = new AC({ sampleRate: 16000 }); } catch (_) { ctx = new AC(); }
+      if (ctx.state === "suspended" && ctx.resume) ctx.resume().catch(function () {});
+      const rate = ctx.sampleRate;
+      const src = ctx.createMediaStreamSource(stream);
+      const proc = ctx.createScriptProcessor(2048, 1, 1);
+      const mute = ctx.createGain();
+      mute.gain.value = 0;
+      let ws = null, ready = false, stopped = false, everReady = false, retries = 0;
+      let pending = [], pendingLen = 0;
+      const queue = [];
+
+      function send(b64) {
+        const msg = JSON.stringify({ realtimeInput: { audio: { data: b64, mimeType: "audio/pcm;rate=16000" } } });
+        if (ready && ws && ws.readyState === 1) ws.send(msg);
+        else { queue.push(msg); if (queue.length > 40) queue.shift(); }   // keep the last ~4 s while (re)connecting
+      }
+
+      function connect() {
+        ready = false;
+        try { ws = new WebSocket(LIVE_URL + "?key=" + encodeURIComponent(S.keys.gemini)); }
+        catch (_) { giveUp(); return; }
+        const sock = ws;
+        sock.onopen = function () {
+          sock.send(JSON.stringify({ setup: {
+            model: "models/" + LIVE_STT_MODEL,
+            generationConfig: { responseModalities: ["TEXT"] },
+            inputAudioTranscription: {}
+          } }));
+        };
+        sock.onmessage = async function (ev) {
+          let m;
+          try { m = JSON.parse(typeof ev.data === "string" ? ev.data : await ev.data.text()); } catch (_) { return; }
+          if (m.setupComplete) {
+            ready = true; everReady = true; retries = 0;
+            while (queue.length && sock.readyState === 1) sock.send(queue.shift());
+            return;
+          }
+          const sc = m.serverContent;
+          if (!sc) return;
+          const fin = sc.inputTranscription && sc.inputTranscription.text;
+          const mid = (sc.interimInputTranscription || sc.undecidedInputTranscription || {}).text;
+          if (fin) {
+            S.liveInterim[ch] = "";
+            showInterim("");
+            addUtterance(ch, tidyTranscript(fin));
+          } else if (mid) {
+            S.liveInterim[ch] = mid;
+            showInterim(interimPrefix(ch) + mid);
+          }
+        };
+        sock.onclose = function () {
+          if (sock !== ws) return;
+          ready = false;
+          if (stopped) return;
+          if (!everReady && retries >= 1) { giveUp(); return; }
+          if (retries++ < 6) setTimeout(function () { if (!stopped) connect(); }, 300 * retries);
+          else giveUp();
+        };
+        sock.onerror = function () { /* onclose handles reconnects */ };
+      }
+
+      function giveUp() {
+        if (stopped) return;
+        teardown(false);
+        toast(S.uiLang === "en" ? "Streaming recognition unavailable; switched to standard recognition." : "流式识别连不上，已改用分段识别。");
+        if (onFallback) onFallback(stream);
+      }
+
+      proc.onaudioprocess = function (ev) {
+        const input = ev.inputBuffer.getChannelData(0);
+        let sum = 0;
+        for (let i = 0; i < input.length; i++) sum += input[i] * input[i];
+        if (meterEl) meterEl.style.transform = "scaleX(" + Math.min(1, Math.sqrt(sum / input.length) * 9).toFixed(3) + ")";
+        const s16 = downsample(new Float32Array(input), rate);
+        pending.push(s16); pendingLen += s16.length;
+        if (pendingLen >= 1600) {   // send every ~100 ms
+          const pcm = new Int16Array(pendingLen);
+          let o = 0;
+          pending.forEach(function (c) {
+            for (let i = 0; i < c.length; i++, o++) {
+              const x = Math.max(-1, Math.min(1, c[i]));
+              pcm[o] = x < 0 ? x * 0x8000 : x * 0x7fff;
+            }
+          });
+          pending = []; pendingLen = 0;
+          send(bufToBase64(pcm.buffer));
+        }
+      };
+      src.connect(proc);
+      proc.connect(mute);
+      mute.connect(ctx.destination);
+      connect();
+
+      function teardown(stopTracks) {
+        stopped = true;
+        try { if (ws) ws.close(); } catch (_) {}
+        try { proc.disconnect(); src.disconnect(); mute.disconnect(); } catch (_) {}
+        try { ctx.close(); } catch (_) {}
+        if (meterEl) meterEl.style.transform = "scaleX(0)";
+        if (stopTracks) stream.getTracks().forEach(function (t) { try { t.stop(); } catch (_) {} });
+      }
+      function stop() {
+        if (stopped) return;
+        teardown(true);
+        if (onEnded) onEnded();
+      }
+      stream.getTracks().forEach(function (t) { t.addEventListener("ended", stop); });
+      return { stop: stop, flush: function () {}, live: true };
+    }
+
+    function startTrackRecognition(ch, track) {
+      const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const rec = new Rec();
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.lang = recognitionLang();
+      rec.onresult = function (ev) {
+        let interim = "";
+        for (let i = ev.resultIndex; i < ev.results.length; i++) {
+          const r = ev.results[i];
+          if (r.isFinal) { S.liveInterim[ch] = ""; addUtterance(ch, r[0].transcript); }
+          else interim += r[0].transcript;
+        }
+        S.liveInterim[ch] = interim;
+        showInterim(interim ? interimPrefix(ch) + interim : "");
+      };
+      rec.onend = function () {
+        if (S.listening && S.trackRecs.indexOf(rec) !== -1 && track.readyState === "live") {
+          try { rec.start(track); } catch (_) {}
+        }
+      };
+      try { rec.start(track); S.trackRecs.push(rec); return true; }
+      catch (_) { return false; }
+    }
+
+    function stopTrackRecognition() {
+      const list = S.trackRecs;
+      S.trackRecs = [];
+      list.forEach(function (r) { try { r.stop(); } catch (_) {} });
+    }
+
+    // ---- Live speaking coach: compares what you've said with the question, the suggested
+    //      answer and your materials, and tells you what to add or correct. ----
+    const COACH = { timer: null, abort: null };
+
+    function scheduleCoach() {
+      if (!$("chkCoach").checked || !aiReady()) return;
+      const a = S.current;
+      if (!a || a.kind !== "answer" || !a.text || !a.spoken || a.status === "streaming") return;
+      if (a.spoken.replace(/\s+/g, "").length < 8) return;
+      clearTimeout(COACH.timer);
+      COACH.timer = setTimeout(function () { runCoach(a); }, 1400);
+    }
+
+    async function runCoach(a) {
+      if (a !== S.current) return;
+      if (COACH.abort) { try { COACH.abort.abort(); } catch (_) {} }
+      const ctl = new AbortController();
+      COACH.abort = ctl;
+      const lang = $("langSel").value === "zh" ? "Chinese" : "English";
+      const mats = a.hits.map(function (h) { return h.text; }).join("\n---\n").slice(0, 2500);
+      let out = "";
+      try {
+        await streamAnswer(
+          "You are a live speaking coach. I am answering a question in a conversation right now. " +
+          "Compare what I have said so far with the question, the suggested answer and my materials. " +
+          "Reply with at most two short lines using exactly these prefixes:\n" +
+          "ADD: <the single most important point I haven't said yet, max 18 words>\n" +
+          "FIX: <only if I said something that contradicts my materials or is clearly wrong; give the correct fact>\n" +
+          "If I already covered the key points and nothing is wrong, reply exactly: GOOD\n" +
+          "No other text. Write the content in " + lang + ".",
+          "[Question]\n" + a.question + "\n\n[Suggested answer]\n" + answerPlainText(a) +
+          (mats ? "\n\n[My materials]\n" + mats : "") + "\n\n[What I have said so far]\n" + a.spoken,
+          ctl.signal, function (d) { out += d; });
+      } catch (_) { return; }
+      if (a !== S.current) return;
+      const coach = { add: "", fix: "", good: false };
+      out.split("\n").forEach(function (line) {
+        const l = line.trim();
+        const m = l.match(/^(ADD|FIX)\s*[:：]\s*(.+)$/i);
+        if (m) coach[m[1].toLowerCase()] = m[2].trim();
+        else if (/^GOOD\b/i.test(l)) coach.good = true;
+      });
+      if (!coach.add && !coach.fix && !coach.good) return;
+      a.coach = coach;
+      renderCoach(a);
+    }
+
+    function renderCoach(a) {
+      const box = a.refs && a.refs.coach;
+      if (!box) return;
+      const c = a.coach;
+      box.replaceChildren();
+      if (!c) { box.hidden = true; return; }
+      box.hidden = false;
+      box.appendChild(el("div", { class: "coach-title", text: "实时提示" }));
+      if (c.fix) box.appendChild(el("div", { class: "coach-fix" }, el("b", { text: "纠正：" }), el("span", { class: "u", text: c.fix })));
+      if (c.add) box.appendChild(el("div", { class: "coach-add" }, el("b", { text: "补充：" }), el("span", { class: "u", text: c.add })));
+      if (!c.fix && !c.add && c.good) box.appendChild(el("div", { class: "coach-good", text: "很好，要点都说到了。" }));
+    }
+
+    // ---- Talk-time meter and long-monologue nudge (like sales call coaching tools) ----
+    const TALK = { me: 0, them: 0, run: 0, nudged: false };
+
+    function noteTalk(ch, text) {
+      const n = text.replace(/\s+/g, "").length;
+      if (ch === "mic") {
+        TALK.me += n;
+        TALK.run += n;
+        if (!TALK.nudged && S.listening && TALK.run > 420) {
+          TALK.nudged = true;
+          toast(S.uiLang === "en" ? "You've been talking for a while. Consider pausing to ask what they think." : "你已经连续说了一段时间，可以停下来问问对方的想法。", 5000);
+        }
+      } else if (ch === "spk") {
+        TALK.them += n;
+        TALK.run = 0;
+        TALK.nudged = false;
+      }
+      updateTalk();
+    }
+
+    function updateTalk() {
+      const box = $("talkRatio");
+      if (!box) return;
+      const total = TALK.me + TALK.them;
+      if (!total || !TALK.them) { box.textContent = ""; return; }
+      const me = Math.round(TALK.me * 100 / total);
+      box.textContent = S.uiLang === "en" ? "Me " + me + "% · Them " + (100 - me) + "%" : "我 " + me + "% · 对方 " + (100 - me) + "%";
+      box.classList.toggle("warn", me > 65);
+    }
+
+    // =====================================================================
     // 15c. Interface language (中文 / English)
     // UI strings are written in Chinese; in English mode every visible UI text node and
     // placeholder/title is translated through this table. User content (transcripts,
@@ -3477,7 +3798,7 @@
       ["删除保存在这个浏览器里的资料、设置和记录", "Delete materials, settings and history saved in this browser"],
       ["点「语音回答」直接说，或者在这里打字", "Press Answer by voice and speak, or type here"], ["关闭 (Esc)", "Close (Esc)"], ["粘贴 API Key", "Paste API key"],
       ["下载为单个 HTML 文件，在自己电脑上双击打开即可使用", "Download as a single HTML file and double-click it on your computer"],
-      ["一个 Key 同时搞定转写和回答", "One key for both transcription and answers"], ["以 AIza 开头，在 aistudio.google.com 免费获取。", "Starts with AIza; get one free at aistudio.google.com."],
+      ["一个 Key 同时搞定转写和回答", "One key for both transcription and answers"], ["以 AIza 或 AQ. 开头，在 aistudio.google.com 免费获取。", "Starts with AIza or AQ.; get one free at aistudio.google.com."],
       ["硅基流动", "SiliconFlow"], ["国内直连 · 免费转写 + DeepSeek-V3", "Direct in mainland China · free transcription + DeepSeek-V3"], ["国内首选", "Best in China"],
       ["以 sk- 开头，在 cloud.siliconflow.cn 获取。同时提供免费的 SenseVoice 语音转写。", "Starts with sk-; get it at cloud.siliconflow.cn. Includes free SenseVoice transcription."],
       ["国内直连 · 只负责回答", "Direct in mainland China · answers only"],
@@ -3573,7 +3894,15 @@
       ["先点「出一道题」。", "Press Next question first."], ["先回答一下（语音或打字都可以）。", "Answer first (voice or text)."], ["评估需要先设置 AI 模型。", "Evaluation needs an AI model first."],
       ["正在评估…", "Evaluating…"], ["评估失败：", "Evaluation failed: "], ["得分 ", "Score "], ["已评估", "Evaluated"],
       ["这个浏览器不支持语音识别：请在设置里填 Gemini Key，或直接打字。", "This browser has no speech recognition: add a Gemini key in Settings, or type."],
-      ["练习 · ", "Practice · "], ["已存进资料库。现场被问到类似问题时会立刻显示。", "Saved to materials. Similar questions will show it instantly."]
+      ["练习 · ", "Practice · "],
+      ["流式识别（最快）", "Streaming recognition (fastest)"],
+      ["用 Gemini Live 边听边转写：对方停顿约 1 秒就出字，中英文自动识别。需要 Gemini Key。", "Gemini Live transcribes while people talk: text appears about 1 s after they pause, Chinese and English detected automatically. Needs a Gemini key."],
+      ["说话时实时提示补充", "Live coaching while I speak"],
+      ["你回答时，Cue 对照问题和你的资料，提示漏掉的要点或说错的地方。", "While you answer, Cue compares what you say with the question and your materials, and flags missing points or mistakes."],
+      ["实时提示", "Live tip"], ["补充：", "Add: "], ["纠正：", "Fix: "], ["很好，要点都说到了。", "Nice, you covered the key points."],
+      ["Gemini Live 流式识别（最快，支持麦克风和电脑声音，中英文自动识别）", "Gemini Live streaming (fastest; mic and computer audio; Chinese/English auto-detected)"],
+      ["浏览器内置识别（麦克风和电脑声音都可以，免 Key；电脑声音为实验功能）", "Browser recognizer (mic and computer audio, no key; computer audio is experimental)"],
+      ["以 AIza 或 AQ. 开头，在 aistudio.google.com 免费获取。", "Starts with AIza or AQ.; get one free at aistudio.google.com."], ["已存进资料库。现场被问到类似问题时会立刻显示。", "Saved to materials. Similar questions will show it instantly."]
     ];
     const I18N_EXACT = new Map();
     const I18N_FRAG = [];
@@ -3670,6 +3999,7 @@
       refreshStatus();
       renderHistory();
       if (S.current) mountAnswer(S.current);
+      updateTalk();
       if (!fromSettings) persistKb();
     }
 
