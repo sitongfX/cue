@@ -207,6 +207,10 @@
     .coach-rescue b { color: var(--me); font-weight: 600; }
     .script { margin-top: 12px; padding-left: 14px; border-left: 2px solid var(--line-2); font-size: calc(17px * var(--scale)); line-height: 1.75; color: var(--text); }
     .utt.prov .utt-text { opacity: .72; }
+    .meta-col { display: flex; flex-direction: column; gap: 2px; }
+    .answer-timing { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+    .lead.prepared.prev::before { content: "刚才类似问题的回答（正在结合上下文重新生成）"; display: block; font-size: 11.5px; font-weight: 600; color: var(--me); letter-spacing: .4px; margin-bottom: 4px; }
+    html[lang="en"] .lead.prepared.prev::before { content: "Your earlier answer to a similar question (regenerating with context)"; }
     .seg button.has-new::after { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-left: 6px; vertical-align: 2px; }
     .utt .who { cursor: pointer; border-radius: 6px; padding: 0 4px; margin-left: -4px; }
     .utt .who:hover { background: var(--raised); }
@@ -956,6 +960,13 @@
         </label>
         <label class="switch">
           <div>
+            <div class="label">浏览器识别抢先听问题</div>
+            <div class="help">Gemini 负责准确的文字；同时用浏览器自带识别（快几百毫秒）提前发现问题、开始起草回答。Gemini 卡住时自动顶上。只对麦克风有效，需选定说话语言。</div>
+          </div>
+          <input id="chkHint" type="checkbox" checked />
+        </label>
+        <label class="switch">
+          <div>
             <div class="label">流式识别（最快）</div>
             <div class="help">用 Gemini Live 边听边转写：对方停顿约 1 秒就出字，中英文自动识别。需要 Gemini Key。</div>
           </div>
@@ -1278,6 +1289,7 @@
 
     const S = {
       convGen: 0,
+      lastInterimAt: {},
       provider: "gemini",
       model: PROVIDERS.gemini.model,
       keys: { gemini: "", siliconflow: "", deepseek: "", zhipu: "", qwen: "" },
@@ -1463,7 +1475,7 @@
         uiLang: S.uiLang, spokenLang: $("spokenLang").value, fastMic: $("chkFastMic").checked ? "1" : "0",
         translate: $("translateSel").value, liveStt: $("chkLiveStt").checked ? "1" : "0", coach: $("chkCoach").checked ? "1" : "0",
         spec: $("chkSpec").checked ? "1" : "0", recap: $("chkRecap").checked ? "1" : "0", semantic: $("chkSemantic").checked ? "1" : "0",
-        memory: $("chkMemory").checked ? "1" : "0", record: $("chkRecord").checked ? "1" : "0", race: $("chkRace").checked ? "1" : "0", roles: $("chkRoles").checked ? "1" : "0", contribute: $("chkContribute").checked ? "1" : "0", protect: $("chkProtect").checked ? "1" : "0", voiceMe: S.voiceMe ? String(S.voiceMe) : ""
+        memory: $("chkMemory").checked ? "1" : "0", record: $("chkRecord").checked ? "1" : "0", race: $("chkRace").checked ? "1" : "0", hint: $("chkHint").checked ? "1" : "0", roles: $("chkRoles").checked ? "1" : "0", contribute: $("chkContribute").checked ? "1" : "0", protect: $("chkProtect").checked ? "1" : "0", voiceMe: S.voiceMe ? String(S.voiceMe) : ""
       };
     }
 
@@ -1487,6 +1499,7 @@
       if (st.memory) $("chkMemory").checked = st.memory === "1";
       if (st.record) $("chkRecord").checked = st.record === "1";
       if (st.race) $("chkRace").checked = st.race === "1";
+      if (st.hint) $("chkHint").checked = st.hint === "1";
       if (st.roles) $("chkRoles").checked = st.roles === "1";
       if (st.contribute) $("chkContribute").checked = st.contribute === "1";
       if (st.protect) { $("chkProtect").checked = st.protect === "1"; applyProtect(); }
@@ -2285,6 +2298,7 @@
           else interim += r[0].transcript;
         }
         pendingInterim = interim;
+        if (interim) S.lastInterimAt[ch] = Date.now();
         showInterim(interim);
         if (ch === "room" && S.spk) ch = "mic";
         if (interim && ch !== "spk" && !looksLikeQuestion(interim)) markCoveredPoints(interim, true);
@@ -2381,6 +2395,7 @@
             ? createLiveTranscriber(ch, ms, $("meterMic"), micEnded, function (st) { S.mic = micSegments(st); })
             : micSegments(ms);
           if (sttRoute() === "browser" || S.fastMic) startRecognition(ch);
+          else if (S.mic && S.mic.live && hintUsable()) startHint(ch);
         } catch (e) {
           openMicDialog(e);
         }
@@ -2474,6 +2489,7 @@
       S.recog = null;
       if (rec) { try { rec.stop(); } catch (_) {} }   // its onend keeps words still pending
       stopTrackRecognition();
+      stopHint();
       const caps = [S.mic, S.spk].filter(Boolean);
       S.mic = null; S.spk = null;
       const finishing = caps.map(function (c) {
@@ -2775,8 +2791,13 @@
       if (!a) return;
       const refs = {};
       const prepared = a.kind === "answer" ? preparedAnswer(a.hits) : "";
-      refs.lead = el("div", { class: "lead" + (prepared ? " prepared" : " placeholder"),
-        text: prepared || (a.kind === "summary" ? "正在整理纪要…" : "正在思考…") });
+      let prevLead = "";
+      if (!prepared && a.kind === "answer" && !a.text) {
+        const prev = S.answers.slice().reverse().find(function (x) { return x !== a && x.kind === "answer" && x.text && sameQuestion(x.question, a.question); });
+        if (prev) prevLead = parseAnswer(prev.text).lead;
+      }
+      refs.lead = el("div", { class: "lead" + (prepared ? " prepared" : (prevLead ? " prepared prev" : " placeholder")),
+        text: prepared || prevLead || (a.kind === "summary" ? "正在整理纪要…" : "正在思考…") });
       refs.script = el("div", { class: "script", hidden: true });
       refs.points = el("ul", { class: "points" + (a.cue ? " cues" : "") });
       refs.raw = el("div", { class: "raw", hidden: true });
@@ -2787,6 +2808,7 @@
       });
       refs.coach = el("div", { class: "coach", hidden: true });
       refs.meta = el("span", { class: "answer-meta" });
+      refs.timing = el("span", { class: "answer-timing u" });
       refs.needsAi = el("div", { class: "needs-ai", hidden: true },
         el("span", { text: a.hits.length ? "以上是资料库里匹配到的内容。设置 AI 模型后，会把它变成一句可以直接说的话。" : "设置 AI 模型后，这里会出现可以直接说出口的回答。" }),
         el("button", { class: "btn btn-primary", type: "button", text: "设置 AI 模型", onclick: function () { openDrawer("model"); } }));
@@ -2848,7 +2870,7 @@
         refs.raw,
         refs.needsAi,
         kbBlock,
-        el("div", { class: "answer-foot" }, refs.meta, actions));
+        el("div", { class: "answer-foot" }, el("div", { class: "meta-col" }, refs.meta, refs.timing), actions));
       host.appendChild(refs.card);
       a.caughtShown = true;
       a.refs = refs;
@@ -2868,7 +2890,7 @@
         r.raw.classList.toggle("caret", streaming);
       } else if (a.text) {
         const p = parseAnswer(a.text);
-        r.lead.classList.remove("placeholder", "prepared");
+        r.lead.classList.remove("placeholder", "prepared", "prev");
         r.lead.textContent = p.lead;
         r.script.hidden = !p.script;
         r.script.textContent = p.script;
@@ -2900,6 +2922,8 @@
         r.meta.textContent = "已被新的问题打断";
       } else if (a.status === "done") {
         r.meta.textContent = speedText(a) + a.model;
+        r.meta.title = timingDetail(a);
+        if (r.timing) r.timing.textContent = timingDetail(a);
       } else if (streaming) {
         r.meta.textContent = "生成中…";
       } else if (a.status === "error") {
@@ -2910,6 +2934,16 @@
     }
 
     // "Ready before they finished" / "0.6 s after they finished": the latency that matters in a live talk.
+    function timingDetail(a) {
+      const en = S.uiLang === "en";
+      const f = function (ms) { return (Math.max(0, ms) / 1000).toFixed(1) + (en ? " s" : " 秒"); };
+      const parts = [];
+      if (a.spec) parts.push(en ? "early draft" : "预判起草");
+      else if (a.heardAt && a.speechEndAt && a.heardAt >= a.speechEndAt && a.heardAt - a.speechEndAt < 15000) parts.push((en ? "recognition " : "识别 ") + f(a.heardAt - a.speechEndAt));
+      if (a.heardAt && a.reqAt >= a.heardAt) parts.push((en ? "detect " : "判断 ") + f(a.reqAt - a.heardAt));
+      if (a.ttft) parts.push((en ? "model " : "模型 ") + f(a.ttft));
+      return parts.join(" · ");
+    }
     function speedText(a) {
       const en = S.uiLang === "en";
       const model = a.ttft ? (en ? " (model " + (a.ttft / 1000).toFixed(1) + " s)" : "（模型 " + (a.ttft / 1000).toFixed(1) + " 秒）") : "";
@@ -2984,6 +3018,9 @@
         auto: Boolean(opts.auto),
         spec: Boolean(opts.spec),
         triggerUtt: opts.trigger || opts.utt || null,
+        reqAt: Date.now(),
+        heardAt: opts.trigger ? (opts.trigger.at || 0) : 0,
+        speechEndAt: opts.trigger ? (S.lastInterimAt[opts.trigger.ch] || 0) : 0,
         followLabel: opts.followLabel || "",
         hits: opts.presetHits || (opts.kind && opts.kind !== "answer" ? [] : smartRetrieve(q + (opts.base ? " " + opts.base.question : ""), 2)),
         subqs: opts.kind && opts.kind !== "answer" ? [] : splitQuestions(opts.displayQuestion || q),
@@ -3580,7 +3617,7 @@
     if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
       navigator.mediaDevices.addEventListener("devicechange", refreshMicDevices);
     }
-    ["scenarioSel", "langSel", "lengthSel", "bgInput", "chkStrict", "modelInput", "spokenLang", "chkFastMic", "translateSel", "chkLiveStt", "chkCoach", "chkSpec", "chkRecap", "chkSemantic", "chkMemory", "chkContribute", "chkProtect", "chkRecord", "chkRoles", "chkRace"].forEach(function (id) {
+    ["scenarioSel", "langSel", "lengthSel", "bgInput", "chkStrict", "modelInput", "spokenLang", "chkFastMic", "translateSel", "chkLiveStt", "chkCoach", "chkSpec", "chkRecap", "chkSemantic", "chkMemory", "chkContribute", "chkProtect", "chkRecord", "chkRoles", "chkRace", "chkHint"].forEach(function (id) {
       $(id).addEventListener("change", persistKb);
     });
     $("scenarioSel").addEventListener("change", function () {
@@ -4143,6 +4180,14 @@
       const queue = [];
       const prov = { utts: [], committed: 0, start: 0 };
       let finishWaiter = null;
+      let lastVoiceAt = 0, voiceStartAt = 0, lastTextAt = Date.now();
+      // Watchdog: someone is clearly talking but Gemini hasn't returned any words for a while.
+      const watchdog = setInterval(function () {
+        if (stopped) { clearInterval(watchdog); return; }
+        const now = Date.now();
+        const stalled = ready && now - lastVoiceAt < 600 && now - Math.max(lastTextAt, voiceStartAt) > 3500;
+        if (stalled && !STT_STALL[ch]) { STT_STALL[ch] = true; onSttStall(ch, true); }
+      }, 1000);
 
       function send(b64) {
         const msg = JSON.stringify({ realtimeInput: { audio: { data: b64, mimeType: "audio/pcm;rate=16000" } } });
@@ -4196,6 +4241,11 @@
           const fin = sc.inputTranscription && sc.inputTranscription.text;
           const m1 = (sc.interimInputTranscription || {}).text || "", m2 = (sc.undecidedInputTranscription || {}).text || "";
           const mid = m2.length > m1.length ? m2 : m1;
+          if (fin || mid) {
+            lastTextAt = Date.now();
+            if (STT_STALL[ch]) { STT_STALL[ch] = false; onSttStall(ch, false); }
+          }
+          if (mid) S.lastInterimAt[ch] = Date.now();
           if (fin) {
             S.liveInterim[ch] = "";
             showInterim("");
@@ -4242,6 +4292,7 @@
         if (meterEl) meterEl.style.transform = "scaleX(" + Math.min(1, Math.sqrt(sum / input.length) * 9).toFixed(3) + ")";
         if (meterEl && meterEl.id === "meterMic") logMicLevel(Math.sqrt(sum / input.length));
         if (meterEl) setLevel(meterEl.id === "meterMic" ? "me" : "them", Math.sqrt(sum / input.length));
+        if (Math.sqrt(sum / input.length) > 0.02) { const nv = Date.now(); if (nv - lastVoiceAt > 1500) voiceStartAt = nv; lastVoiceAt = nv; }
         const s16 = downsample(new Float32Array(input), rate);
         pending.push(s16); pendingLen += s16.length;
         if (pendingLen >= 800) {   // send every ~50 ms
@@ -4570,7 +4621,12 @@
       prov.utts.forEach(removeUtt);
       prov.utts = []; prov.committed = 0; prov.start = 0;
       const pieces = (ch === "room" || (ch === "mic" && !S.spk)) ? splitSentences(text) : [text];
-      pieces.forEach(function (p) { addUtterance(ch, p); });
+      // Skip pieces the browser recognizer already added while Gemini was stalled.
+      const recent = HINT.promotedFinals.filter(function (h) { return Date.now() - h.at < 20000; });
+      pieces.forEach(function (p) {
+        if (recent.some(function (h) { return bigramSim(h.text, p) > 0.6; })) return;
+        addUtterance(ch, p);
+      });
     }
 
     // ---- Follow-up recap: summary, their questions, commitments, and an email draft ----
@@ -5730,6 +5786,67 @@
       warmUp();
     }, 25000);
 
+
+    // =====================================================================
+    // 15a8. Hybrid recognition, stall fallback
+    // =====================================================================
+    // The browser recognizer usually shows words a few hundred ms sooner than Gemini Live. Next to Live
+    // (mic only) it acts as a hint: it can start an early draft when it hears a question, and it takes
+    // over as the transcript source if Gemini stops returning words while someone is talking.
+    const STT_STALL = {};
+    const HINT = { rec: null, ch: "", promoted: false, promotedFinals: [], pending: "" };
+    function hintUsable() {
+      return Boolean((window.SpeechRecognition || window.webkitSpeechRecognition) && $("chkHint").checked && $("spokenLang").value !== "mix");
+    }
+    function startHint(ch) {
+      const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!Rec || HINT.rec) return;
+      const rec = new Rec();
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.lang = recognitionLang();
+      HINT.ch = ch;
+      rec.onresult = function (ev) {
+        let interim = "";
+        for (let i = ev.resultIndex; i < ev.results.length; i++) {
+          const r = ev.results[i];
+          if (r.isFinal) {
+            if (HINT.promoted) {
+              const u = addUtterance(ch, r[0].transcript);
+              if (u) HINT.promotedFinals.push({ text: r[0].transcript, at: Date.now() });
+            }
+          } else interim += r[0].transcript;
+        }
+        HINT.pending = interim;
+        if (!interim) return;
+        S.lastInterimAt[ch] = Date.now();
+        const live = (S.liveInterim[ch] || "").trim();
+        // Only act when the browser has heard more than Gemini so far (that's the head start).
+        if (interim.replace(/\s/g, "").length > live.replace(/[\s，。？！,.?!]/g, "").length + 1) {
+          if (HINT.promoted) showInterim(interimPrefix(ch) + interim);
+          if (ch === "room" && !S.spk) maybeSpeculate("room", interim);
+        }
+      };
+      rec.onend = function () {
+        if (HINT.promoted && HINT.pending.trim()) { addUtterance(ch, HINT.pending); HINT.promotedFinals.push({ text: HINT.pending, at: Date.now() }); }
+        HINT.pending = "";
+        if (S.listening && HINT.rec === rec) { try { rec.start(); } catch (_) {} }
+      };
+      try { rec.start(); HINT.rec = rec; } catch (_) {}
+    }
+    function stopHint() {
+      const rec = HINT.rec;
+      HINT.rec = null; HINT.promoted = false;
+      if (rec) { try { rec.stop(); } catch (_) {} }
+    }
+    function onSttStall(ch, stalled) {
+      if (ch !== HINT.ch || !HINT.rec) return;
+      HINT.promoted = stalled;
+      toast(stalled
+        ? (S.uiLang === "en" ? "Gemini recognition is slow; using the browser recognizer for now." : "Gemini 识别变慢，已临时改用浏览器识别。")
+        : (S.uiLang === "en" ? "Gemini recognition is back." : "Gemini 识别已恢复。"), 3000);
+    }
+
     // =====================================================================
     // 15c. Interface language (中文 / English)
     // UI strings are written in Chinese; in English mode every visible UI text node and
@@ -5921,6 +6038,10 @@
       ["正在评估…", "Evaluating…"], ["评估失败：", "Evaluation failed: "], ["得分 ", "Score "], ["已评估", "Evaluated"],
       ["这个浏览器不支持语音识别：请在设置里填 Gemini Key，或直接打字。", "This browser has no speech recognition: add a Gemini key in Settings, or type."],
       ["练习 · ", "Practice · "],
+      ["浏览器识别抢先听问题", "Browser recognizer listens ahead for questions"],
+      ["Gemini 负责准确的文字；同时用浏览器自带识别（快几百毫秒）提前发现问题、开始起草回答。Gemini 卡住时自动顶上。只对麦克风有效，需选定说话语言。", "Gemini produces the accurate text; the browser's built-in recognizer (a few hundred ms faster) spots questions early and starts drafting. It also takes over if Gemini stalls. Mic only; needs a spoken language set."],
+      ["Gemini 识别变慢，已临时改用浏览器识别。", "Gemini recognition is slow; using the browser recognizer for now."],
+      ["Gemini 识别已恢复。", "Gemini recognition is back."],
       ["多模型抢答（更快）", "Race models (faster)"],
       ["先用最快的模型；0.65 秒还没出字就同时请求另一个，谁先出字用谁，另一个立刻取消。会多用一点额度。", "Starts on the fastest model; if no words arrive in 0.65 s, a second model is asked too, the first to respond wins and the other is cancelled. Uses a bit more quota."],
       ["搜索记录：问题、对方说的话、逐字稿…", "Search history: questions, what they said, transcripts…"],
