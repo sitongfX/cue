@@ -5183,6 +5183,7 @@
           LEARN = Object.assign(LEARN, saved);
           LEARN.style = Object.assign({ "1": 0, "2": 0, "3": 0, "4": 0 }, saved.style || {});
           LEARN.spec = Object.assign({ hit: 0, miss: 0 }, saved.spec || {});
+          if (saved.speed && typeof saved.speed === "object") RACE.stats = saved.speed;
         }
       } catch (_) {}
       renderLearn();
@@ -5671,6 +5672,8 @@
     function noteSpeed(key, ms) {
       const old = RACE.stats[key];
       RACE.stats[key] = old === undefined ? ms : old * 0.7 + ms * 0.3;
+      LEARN.speed = RACE.stats;   // remembered across visits, so a slow model stays demoted
+      learnSave();
     }
     // Resolves when the winning stream finishes. onWinner(candidate) is called once, at the first words.
     function streamRace(sys, user, signal, onDelta, onWinner) {
