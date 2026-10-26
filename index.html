@@ -207,6 +207,8 @@
     .coach-rescue b { color: var(--me); font-weight: 600; }
     .script { margin-top: 12px; padding-left: 14px; border-left: 2px solid var(--line-2); font-size: calc(17px * var(--scale)); line-height: 1.75; color: var(--text); }
     .utt.prov .utt-text { opacity: .72; }
+    .keys-grid { display: grid; grid-template-columns: auto 1fr; gap: 10px 14px; margin-top: 16px; align-items: center; font-size: 13.5px; color: var(--text-2); }
+    .keys-grid kbd { justify-self: start; font-family: var(--mono); font-size: 12px; padding: 2px 8px; border: 1px solid var(--line-2); border-radius: 6px; background: var(--raised); color: var(--text); }
     .meta-col { display: flex; flex-direction: column; gap: 2px; }
     .answer-timing { font-size: 11px; color: var(--muted); font-family: var(--mono); }
     .lead.prepared.prev::before { content: "刚才类似问题的回答（正在结合上下文重新生成）"; display: block; font-size: 11.5px; font-weight: 600; color: var(--me); letter-spacing: .4px; margin-bottom: 4px; }
@@ -635,6 +637,7 @@
                   <span><kbd>1</kbd>–<kbd>4</kbd> 追问</span>
                   <span><kbd>R</kbd> 帮我圆回来</span>
                   <span><kbd>N</kbd> 新对话</span>
+                  <span><kbd>?</kbd> 全部快捷键</span>
                   <span><kbd>X</kbd> 不是问题</span>
                   <span><kbd>Esc</kbd> 关闭面板</span>
                 </div>
@@ -772,8 +775,8 @@
               <div class="kb-test-out" id="kbTestOut" hidden></div>
             </div>
             <div class="row">
-              <button class="btn" id="btnExportKb" type="button">导出资料库</button>
-              <button class="btn" id="btnImportKb" type="button">导入资料库</button>
+              <button class="btn" id="btnExportKb" type="button" title="资料、对话记录、学习记录和设置，一个文件全部备份（不含 API Key）">备份全部数据</button>
+              <button class="btn" id="btnImportKb" type="button" title="从备份文件恢复（会和现有内容合并）">从备份恢复</button>
               <button class="btn btn-ghost" id="btnForgetLocal" type="button" hidden title="删除保存在这个浏览器里的资料、设置和记录">清除浏览器里的数据</button>
               <input id="kbImportInput" type="file" accept=".json" hidden />
             </div>
@@ -1095,6 +1098,24 @@
   </aside>
 
   <!-- ================= Blocked / insecure origin dialog ================= -->
+  <dialog id="keysDialog">
+    <h3>快捷键</h3>
+    <div class="keys-grid">
+      <kbd>Space</kbd><span>回答对方刚说的（用已经听到的部分）</span>
+      <kbd>/</kbd><span>打字提问</span>
+      <kbd>1</kbd><span>展开</span>
+      <kbd>2</kbd><span>举个例子</span>
+      <kbd>3</kbd><span>更简短</span>
+      <kbd>4</kbd><span>换成英文</span>
+      <kbd>R</kbd><span>帮我圆回来（说错或卡住时）</span>
+      <kbd>X</kbd><span>不是问题（以后类似的话不再自动回答）</span>
+      <kbd>N</kbd><span>新对话</span>
+      <kbd>Esc</kbd><span>关闭面板</span>
+      <kbd>?</kbd><span>显示这个列表</span>
+    </div>
+    <div class="row" style="margin-top: 18px; justify-content: flex-end;"><button class="btn" id="btnKeysClose" type="button">关闭</button></div>
+  </dialog>
+
   <dialog id="voiceDialog">
     <h3>让 Cue 认识你的声音</h3>
     <p>只用麦克风时，Cue 靠音量区分你和对方：你离麦克风最近，声音最大。点开始后，用平时说话的音量读下面这句话（约 4 秒）。</p>
@@ -3508,6 +3529,7 @@
       if ((ev.key === "x" || ev.key === "X") && S.current && S.current.auto && S.current.kind === "answer") { ev.preventDefault(); notAQuestion(S.current); return; }
       if ((ev.key === "r" || ev.key === "R") && S.current && S.current.kind === "answer") { ev.preventDefault(); rescue(S.current); return; }
       if (ev.key === "n" || ev.key === "N") { ev.preventDefault(); newConversation(false); return; }
+      if (ev.key === "?") { ev.preventDefault(); openShortcuts(); return; }
       const f = FOLLOWUPS.find(function (x) { return x.key === ev.key; });
       if (f && S.current && S.current.kind === "answer") { ev.preventDefault(); followUp(f); }
     }
@@ -3611,13 +3633,15 @@
         ? hits.map(function (h) { return "《" + h.doc + "》\n" + h.text; }).join("\n\n— — —\n\n") + "\n\n（" + ms + " ms）"
         : "没有匹配到。可以补充相关内容，或用 Q/A 的格式写这个问题。";
     });
-    $("btnExportKb").addEventListener("click", function () {
-      if (!S.docs.length) { toast("资料库是空的。"); return; }
+    $("btnExportKb").addEventListener("click", async function () {
+      const sessions = await loadSessions();
+      if (!S.docs.length && !sessions.length) { toast("还没有可以导出的资料或记录。"); return; }
       S.kbDirty = false;
-      const url = URL.createObjectURL(new Blob([JSON.stringify({ version: 3, docs: S.docs, learn: LEARN }, null, 2)], { type: "application/json" }));
-      const a = el("a", { href: url, download: "cue-knowledge.json" });
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+      const backup = { version: 4, app: "cue", exportedAt: new Date().toISOString(), docs: S.docs, sessions: sessions, learn: LEARN, settings: currentSettings() };
+      downloadText(JSON.stringify(backup, null, 2), "cue-backup-" + new Date().toISOString().slice(0, 10) + ".json", "application/json");
+      LAST_BACKUP.at = Date.now();
+      idbDo("readwrite", function (st) { return st.put(LAST_BACKUP.at, "lastBackup"); }).catch(function () {});
+      toast((S.uiLang === "en" ? "Backed up: " : "已备份：") + S.docs.length + (S.uiLang === "en" ? " materials, " : " 份资料、") + sessions.length + (S.uiLang === "en" ? " conversations (no API keys)." : " 场对话（不含 API Key）。"), 4000);
     });
     $("btnImportKb").addEventListener("click", function () { $("kbImportInput").click(); });
     $("kbImportInput").addEventListener("change", async function () {
@@ -3632,11 +3656,21 @@
           const obj = data.docs || data;
           Object.keys(obj).forEach(function (k) { if (typeof obj[k] === "string" && addDoc(k, obj[k])) n++; });
         }
+        let ns = 0;
+        if (Array.isArray(data.sessions) && data.sessions.length) {
+          const have = await loadSessions();
+          const ids = new Set(have.map(function (x) { return x.id; }));
+          const incoming = data.sessions.filter(function (x) { return x && typeof x.id === "number" && typeof x.markdown === "string" && !ids.has(x.id); });
+          ns = incoming.length;
+          const merged = have.concat(incoming).sort(function (a, b) { return b.id - a.id; }).slice(0, SESS_MAX);
+          await idbDo("readwrite", function (st) { return st.put(merged, "sessions"); });
+        }
+        if (data.settings && typeof data.settings === "object") { applySettings(data.settings); persistKb(); }
         if (data.learn && data.learn.w && typeof data.learn.w === "object") {
           LEARN = Object.assign({ w: {}, b: -1.1, n: 0, pos: 0, neg: 0, style: { "1": 0, "2": 0, "3": 0, "4": 0 }, spec: { hit: 0, miss: 0 } }, data.learn);
           learnSave();
         }
-        toast("已导入 " + n + " 份资料。" + (data.learn ? "（含学习记录）" : ""));
+        toast((S.uiLang === "en" ? "Imported " + n + " materials, " + ns + " conversations" : "已导入 " + n + " 份资料、" + ns + " 场对话") + (data.learn ? (S.uiLang === "en" ? " and learning data." : "，含学习记录。") : "。"));
       } catch (e) {
         toast("导入失败：" + errMsg(e));
       }
@@ -3888,6 +3922,7 @@
       catch (_) { return []; }
     }
 
+    const SESS_MAX = 200;
     let lastSavedSig = "";
     async function saveSessionLocal() {
       if (S.utts.length < 2) return;
@@ -3909,7 +3944,7 @@
       try {
         const list = (await loadSessions()).filter(function (x) { return x.id !== rec.id; });
         list.unshift(rec);
-        await idbDo("readwrite", function (st) { return st.put(list.slice(0, 60), "sessions"); });
+        await idbDo("readwrite", function (st) { return st.put(list.slice(0, SESS_MAX), "sessions"); });
       } catch (_) { /* storage unavailable (e.g. sandboxed page) */ }
     }
 
@@ -5901,6 +5936,33 @@
         : (S.uiLang === "en" ? "Gemini recognition is back." : "Gemini 识别已恢复。"), 3000);
     }
 
+
+    // =====================================================================
+    // 15a9. Data safety, shortcuts
+    // =====================================================================
+    // Ask the browser not to evict Cue's data under storage pressure.
+    if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () {});
+    // Gentle backup reminder: everything lives in this browser only.
+    const LAST_BACKUP = { at: 0 };
+    idbDo("readonly", function (st) { return st.get("lastBackup"); }).then(function (v) {
+      LAST_BACKUP.at = v || 0;
+      setTimeout(async function () {
+        const n = (await loadSessions()).length;
+        if ((S.docs.length || n >= 3) && Date.now() - LAST_BACKUP.at > 14 * 864e5) {
+          toast(S.uiLang === "en" ? "Your materials and history live only in this browser. Back them up in Prep → Back up everything." : "资料和记录只存在这个浏览器里，记得在「准备」→「备份全部数据」备份一下。", 7000);
+          LAST_BACKUP.at = Date.now() - 7 * 864e5;   // remind again in a week, not every visit
+          idbDo("readwrite", function (st) { return st.put(LAST_BACKUP.at, "lastBackup"); }).catch(function () {});
+        }
+      }, 4000);
+    }).catch(function () {});
+
+    // "?" shows every keyboard shortcut.
+    function openShortcuts() {
+      const d = $("keysDialog");
+      if (d.showModal) d.showModal(); else d.setAttribute("open", "");
+    }
+    $("btnKeysClose").addEventListener("click", function () { $("keysDialog").close(); });
+
     // =====================================================================
     // 15c. Interface language (中文 / English)
     // UI strings are written in Chinese; in English mode every visible UI text node and
@@ -6092,6 +6154,15 @@
       ["正在评估…", "Evaluating…"], ["评估失败：", "Evaluation failed: "], ["得分 ", "Score "], ["已评估", "Evaluated"],
       ["这个浏览器不支持语音识别：请在设置里填 Gemini Key，或直接打字。", "This browser has no speech recognition: add a Gemini key in Settings, or type."],
       ["练习 · ", "Practice · "],
+      ["备份全部数据", "Back up everything"], ["从备份恢复", "Restore from backup"],
+      ["资料、对话记录、学习记录和设置，一个文件全部备份（不含 API Key）", "Materials, history, learning and settings in one file (no API keys)"],
+      ["从备份文件恢复（会和现有内容合并）", "Restore from a backup file (merged with what's here)"],
+      ["还没有可以导出的资料或记录。", "Nothing to back up yet."],
+      ["快捷键", "Keyboard shortcuts"], ["全部快捷键", "all shortcuts"],
+      ["回答对方刚说的（用已经听到的部分）", "Answer what they just said (using what's been heard so far)"],
+      ["展开", "Expand"], ["帮我圆回来（说错或卡住时）", "Rescue me (stuck or slipped)"],
+      ["不是问题（以后类似的话不再自动回答）", "Not a question (won't auto-answer similar lines)"],
+      ["显示这个列表", "Show this list"],
       ["跟随对话的语言（对方说英文就用英文回答）", "Follow the conversation (answer in English when they speak English)"],
       ["对方是谁", "Who you're talking to"], ["这次聊什么", "What it's about"], ["我想达成什么", "What you want out of it"],
       ["关于我 / 其他背景", "About me / other context"],

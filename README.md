@@ -105,7 +105,7 @@ Installers for macOS (.dmg), Windows (.exe) and Linux (.AppImage) are built by G
 ## Privacy
 
 - API keys live only in the page's memory unless you turn on *Remember the key*, in which case they're stored encrypted in this browser. They're never sent anywhere except the provider you chose. (The streaming connection passes the key in the WebSocket URL, which is how the Gemini Live API authenticates browsers.)
-- Materials, settings and history are stored in your browser (IndexedDB). *Prep → Clear data in this browser* removes them.
+- Materials, settings, history and learning data are stored in your browser (IndexedDB); Cue asks the browser to keep them persistent. *Prep → Back up everything* saves all of it (never API keys) in one JSON file that *Restore from backup* merges back. *Prep → Clear data in this browser* removes them.
 - Audio is sent only to the transcription provider you configured.
 
 ## Deploying (GitHub Pages)
