@@ -205,6 +205,21 @@
     .learn-bar { height: 6px; border-radius: 4px; background: var(--line); overflow: hidden; margin-top: 6px; }
     .learn-bar > span { display: block; height: 100%; background: var(--accent); }
     .coach-rescue b { color: var(--me); font-weight: 600; }
+    .q { position: relative; padding-right: 34px; }
+    .q-x { position: absolute; top: -4px; right: -6px; width: 28px; height: 28px; border-radius: 8px; border: 0; background: transparent; color: var(--muted); cursor: pointer; display: grid; place-items: center; }
+    .q-x:hover { background: var(--raised); color: var(--text); }
+    .q-x svg { width: 14px; height: 14px; }
+    /* Floating window = teleprompter: one line, what's next, nothing else */
+    body.pip .answer-foot, body.pip #historyWrap, body.pip .kb, body.pip #statsCard, body.pip .subqs, body.pip .q-x, body.pip #ready, body.pip .notice { display: none !important; }
+    body.pip .stage { padding: 14px 16px; }
+    body.pip .answer { padding: 16px 18px; border-radius: 16px; }
+    body.pip .q-text { font-size: 13px; color: var(--muted); }
+    body.pip .lead { font-size: calc(26px * var(--scale)); line-height: 1.4; }
+    body.pip .points li.covered { display: none; }
+    body.pip .points li { font-size: calc(18px * var(--scale)); }
+    body.pip .points li.next { font-size: calc(21px * var(--scale)); }
+    body.pip .hud { top: 0; font-size: 12px; padding: 8px 10px; }
+    body.pip .hud-tip { font-size: calc(16px * var(--scale)); }
     .hud { position: sticky; top: -28px; z-index: 6; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 14px; border-radius: 14px; border: 1px solid rgba(155, 184, 245, .35); background: rgba(20, 24, 33, .92); backdrop-filter: blur(8px); box-shadow: 0 10px 30px rgba(0,0,0,.35); font-size: 13px; }
     .hud-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--me); animation: pulse 1.2s infinite; flex-shrink: 0; }
     .hud-time { font-family: var(--mono); font-weight: 650; color: var(--text); min-width: 42px; }
@@ -732,7 +747,11 @@
           <div class="card" id="learnCard">
             <div class="card-title">Cue 对你的了解 <span class="help">（越用越准，只存在这个浏览器里）</span></div>
             <div id="learnBody"></div>
-            <div class="row" style="margin-top: 10px;"><button class="btn btn-ghost" id="btnLearnReset" type="button">重置学习</button></div>
+            <div class="help" style="margin-top: 6px;">保存位置：这个浏览器的 IndexedDB（voice-copilot → learn / trainlog）。换浏览器或清除数据会丢失，可以用「导出资料库」一起备份。</div>
+            <div class="row" style="margin-top: 10px;">
+              <button class="btn" id="btnExportTrain" type="button">导出训练数据</button>
+              <button class="btn btn-ghost" id="btnLearnReset" type="button">重置学习</button>
+            </div>
           </div>
         </div></div>
       </section>
@@ -2604,10 +2623,6 @@
         } });
         actions.appendChild(mailBtn);
       }
-      if (a.kind === "answer" && a.auto) {
-        actions.appendChild(el("button", { class: "chip", type: "button", title: "这句不是问题：以后类似的话不再自动回答", onclick: function () { notAQuestion(a); } },
-          "不是问题", el("kbd", { text: "X" })));
-      }
       if (a.kind === "answer") {
         actions.appendChild(el("button", { class: "chip", type: "button", title: "说到一半卡住或说错了：给你一句接下来能说的话", onclick: function () { rescue(a); } },
           "帮我圆回来", el("kbd", { text: "R" })));
@@ -2628,7 +2643,8 @@
       refs.card = el("article", { class: "answer" + (a.spec ? " spec" : "") + (a.auto && !a.caughtShown ? " caught" : "") },
         el("div", { class: "q" },
           el("span", { class: "q-tag", text: a.spec ? "预判中" : (KIND_LABELS[a.kind] || a.followLabel || "对方问") }),
-          el("div", { class: "q-text", text: a.question })),
+          el("div", { class: "q-text", text: a.question }),
+          a.kind === "answer" && a.auto ? xButton(a) : null),
         refs.subqs,
         refs.coach,
         refs.bridge,
@@ -2719,6 +2735,19 @@
       });
     }
 
+    function xButton(a) {
+      const b = el("button", { class: "q-x", type: "button", title: "不是问题（X）：以后类似的话不再自动回答", "aria-label": "不是问题", onclick: function () { notAQuestion(a); } });
+      const svgNS = "http://www.w3.org/2000/svg";
+      const svg = document.createElementNS(svgNS, "svg");
+      svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("fill", "none"); svg.setAttribute("stroke", "currentColor");
+      svg.setAttribute("stroke-width", "2.2"); svg.setAttribute("stroke-linecap", "round");
+      const path = document.createElementNS(svgNS, "path");
+      path.setAttribute("d", "M6 6l12 12M18 6L6 18");
+      svg.appendChild(path);
+      b.appendChild(svg);
+      return b;
+    }
+
     function showAnswer(a) {
       S.current = a;
       $("listenHint").hidden = true;
@@ -2739,7 +2768,7 @@
       if (opts.auto && navigator.vibrate) { try { navigator.vibrate(30); } catch (_) {} }
       // The other side kept talking: replace the earlier draft instead of piling up history.
       if (opts.auto && S.current && S.current.auto && (S.current.spec || q.indexOf(S.current.question) === 0)) {
-        if (S.current.spec && !opts.spec) noteSpec(false);
+        if (S.current.spec && !opts.spec) { noteSpec(false); logTrain(S.current.question, q, false); }
         S.answers = S.answers.filter(function (x) { return x !== S.current; });
       }
 
@@ -3274,7 +3303,7 @@
     $("btnExportKb").addEventListener("click", function () {
       if (!S.docs.length) { toast("资料库是空的。"); return; }
       S.kbDirty = false;
-      const url = URL.createObjectURL(new Blob([JSON.stringify({ version: 2, docs: S.docs }, null, 2)], { type: "application/json" }));
+      const url = URL.createObjectURL(new Blob([JSON.stringify({ version: 3, docs: S.docs, learn: LEARN }, null, 2)], { type: "application/json" }));
       const a = el("a", { href: url, download: "cue-knowledge.json" });
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
@@ -3292,7 +3321,11 @@
           const obj = data.docs || data;
           Object.keys(obj).forEach(function (k) { if (typeof obj[k] === "string" && addDoc(k, obj[k])) n++; });
         }
-        toast("已导入 " + n + " 份资料。");
+        if (data.learn && data.learn.w && typeof data.learn.w === "object") {
+          LEARN = Object.assign({ w: {}, b: -1.1, n: 0, pos: 0, neg: 0, style: { "1": 0, "2": 0, "3": 0, "4": 0 }, spec: { hit: 0, miss: 0 } }, data.learn);
+          learnSave();
+        }
+        toast("已导入 " + n + " 份资料。" + (data.learn ? "（含学习记录）" : ""));
       } catch (e) {
         toast("导入失败：" + errMsg(e));
       }
@@ -3406,7 +3439,7 @@
       navigator.serviceWorker.register("./sw.js").catch(function () {});
     }
     $("btnForgetLocal").addEventListener("click", function () {
-      idbDo("readwrite", function (st) { st.delete("sessions"); st.delete(VAULT); st.delete("learn"); st.delete("emb"); return st.delete("state"); })
+      idbDo("readwrite", function (st) { st.delete("sessions"); st.delete(VAULT); st.delete("learn"); st.delete("emb"); st.delete("trainlog"); return st.delete("state"); })
         .then(function () { $("chkRememberKey").checked = false; toast("已清除这个浏览器里保存的资料、设置和 Key（当前页面里的内容不受影响）。"); })
         .catch(function () {});
     });
@@ -4168,6 +4201,7 @@
     function confirmSpec(a, q) {
       a.spec = false;
       noteSpec(true);
+      logTrain(a.question, q, true);
       a.finalAt = Date.now();
       if (a.refs && a.refs.card) a.refs.card.classList.remove("spec");
       updateAnswer(a);
@@ -4844,6 +4878,23 @@
       return "\n" + lines.join("\n");
     }
 
+    // ---- Training log (local only): partial question heard → was the early draft kept? ----
+    // These labelled pairs are exactly what a "has the question finished?" model needs. They never leave
+    // the browser unless you export them yourself.
+    let TRAIN = [];
+    async function trainLoad() {
+      try { TRAIN = (await idbDo("readonly", function (st) { return st.get("trainlog"); })) || []; } catch (_) { TRAIN = []; }
+    }
+    function logTrain(partial, final, kept) {
+      TRAIN.push({ t: Date.now(), partial: String(partial).slice(-300), final: String(final).slice(-300), kept: Boolean(kept), lang: CJK_RE.test(final) ? "zh" : "en" });
+      if (TRAIN.length > 3000) TRAIN = TRAIN.slice(-3000);
+      idbDo("readwrite", function (st) { return st.put(TRAIN, "trainlog"); }).catch(function () {});
+    }
+    function exportTrain() {
+      if (!TRAIN.length) { toast(S.uiLang === "en" ? "No training examples yet. They're collected as Cue predicts questions during calls." : "还没有训练样本。通话中 Cue 每次提前预判问题都会记录一条。"); return; }
+      downloadText(JSON.stringify({ kind: "cue-turn-end", version: 1, rows: TRAIN }, null, 2), "cue-training-data.json", "application/json");
+    }
+
     // ---- Prediction timing that tunes itself from how often early drafts are kept ----
     function noteSpec(hit) {
       if (hit) { LEARN.spec.hit++; SPEC.sHit++; } else { LEARN.spec.miss++; SPEC.sMiss++; }
@@ -4911,10 +4962,14 @@
         row(en ? "Early-draft hit rate → prediction delay" : "预判命中率 → 抢跑延迟",
           n ? Math.round(LEARN.spec.hit * 100 / n) + "% · " + specDelay() + " ms" : (en ? "no data yet · 300 ms" : "暂无数据 · 300 ms"), n ? LEARN.spec.hit * 100 / n : 0),
         row(en ? "Your own answers remembered" : "记住的你的回答", String(memN)),
-        row(en ? "Passages searchable by meaning" : "可按意思检索的资料段落", SEM.vecs.size + " / " + S.chunks.length)
+        row(en ? "Passages searchable by meaning" : "可按意思检索的资料段落", SEM.vecs.size + " / " + S.chunks.length),
+        row(en ? "Labelled examples for a turn-end model" : "可用于训练“问题说完了吗”模型的样本", String(TRAIN.length))
       );
     }
+    $("btnExportTrain").addEventListener("click", exportTrain);
     $("btnLearnReset").addEventListener("click", function () {
+      TRAIN = [];
+      idbDo("readwrite", function (st) { return st.delete("trainlog"); }).catch(function () {});
       LEARN = { w: {}, b: -1.1, n: 0, pos: 0, neg: 0, style: { "1": 0, "2": 0, "3": 0, "4": 0 }, spec: { hit: 0, miss: 0 } };
       learnSave();
       toast(S.uiLang === "en" ? "Learning reset." : "已重置学习。");
@@ -5111,6 +5166,9 @@
       ["正在评估…", "Evaluating…"], ["评估失败：", "Evaluation failed: "], ["得分 ", "Score "], ["已评估", "Evaluated"],
       ["这个浏览器不支持语音识别：请在设置里填 Gemini Key，或直接打字。", "This browser has no speech recognition: add a Gemini key in Settings, or type."],
       ["练习 · ", "Practice · "],
+      ["不是问题（X）：以后类似的话不再自动回答", "Not a question (X): Cue won't auto-answer similar lines"],
+      ["保存位置：这个浏览器的 IndexedDB（voice-copilot → learn / trainlog）。换浏览器或清除数据会丢失，可以用「导出资料库」一起备份。", "Stored in this browser's IndexedDB (voice-copilot → learn / trainlog). It's lost if you switch browsers or clear data; Export materials backs it up too."],
+      ["导出训练数据", "Export training data"], ["（含学习记录）", " (including learning data)"],
       ["Cue 对你的了解", "What Cue has learned about you"], ["（越用越准，只存在这个浏览器里）", " (gets better with use; stored only in this browser)"],
       ["重置学习", "Reset learning"], ["不是问题", "Not a question"], ["帮我圆回来", "Rescue me"], ["接着说：", "Say next: "],
       ["这句不是问题：以后类似的话不再自动回答", "Not a question: Cue won't auto-answer similar lines"],
@@ -5380,7 +5438,7 @@
     refreshMicDevices();
     probe();
     vaultLoad().then(function () { semLoad().then(scheduleSemIndex); });
-    learnLoad();
+    trainLoad().then(learnLoad);
     extUi();
     setInterval(probe, 8000);
     if (/[?&]demo=1/.test(window.location.search)) setTimeout(runDemo, 300);
