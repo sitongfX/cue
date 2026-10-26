@@ -207,6 +207,14 @@
     .coach-rescue b { color: var(--me); font-weight: 600; }
     .script { margin-top: 12px; padding-left: 14px; border-left: 2px solid var(--line-2); font-size: calc(17px * var(--scale)); line-height: 1.75; color: var(--text); }
     .utt.prov .utt-text { opacity: .72; }
+    .cite { display: inline-grid; place-items: center; min-width: 17px; height: 17px; padding: 0 4px; margin: 0 1px 0 3px; border-radius: 5px; border: 1px solid rgba(201, 227, 111, .5); background: var(--accent-soft); color: var(--accent); font: 600 10.5px/1 var(--mono); vertical-align: 3px; cursor: pointer; }
+    .cite:hover { background: var(--accent); color: var(--accent-ink); }
+    .uncited { margin-left: 4px; font-size: .8em; color: #f3c38b; cursor: help; vertical-align: 2px; }
+    .kb-num { display: block; font-size: 11px; font-weight: 650; color: var(--accent); margin-bottom: 2px; }
+    .kb-snip.cited { border-left: 2px solid var(--accent); padding-left: 8px; }
+    .kb-snip.flash { animation: caught 1.2s ease-out; background: rgba(201, 227, 111, .12); border-radius: 6px; }
+    .kb-used { margin-left: auto; font-size: 11px; color: var(--muted); font-weight: 500; }
+    body.pip .cite, body.pip .uncited { display: none; }
     .keys-grid { display: grid; grid-template-columns: auto 1fr; gap: 10px 14px; margin-top: 16px; align-items: center; font-size: 13.5px; color: var(--text-2); }
     .keys-grid kbd { justify-self: start; font-family: var(--mono); font-size: 12px; padding: 2px 8px; border: 1px solid var(--line-2); border-radius: 6px; background: var(--raised); color: var(--text); }
     .meta-col { display: flex; flex-direction: column; gap: 2px; }
@@ -2650,6 +2658,10 @@
       if (S.strictKb && S.docs.length) {
         strict = "\nIf [My materials] contain relevant facts, use them exactly. Never invent numbers, names, dates or experiences that aren't there; if the materials don't cover it, answer honestly in general terms.";
       }
+      if (S.docs.length) {
+        strict += "\nThe passages in [My materials] are numbered. Right after any fact, number or claim taken from a passage, add its number in square brackets, e.g. \"15% off for annual plans [1]\". " +
+          "Only cite passages you actually used; never put a number on something that isn't in them.";
+      }
       return scen + "\n" + fmt + strict + styleHints(lang === "zh" ? "zh" : "en");
     }
 
@@ -2845,7 +2857,7 @@
 
     function answerPlainText(a) {
       const p = parseAnswer(a.text);
-      return [p.lead].concat(p.script ? [p.script] : []).concat(p.points.map(function (x) { return "• " + x; })).join("\n");
+      return stripCites([p.lead].concat(p.script ? [p.script] : []).concat(p.points.map(function (x) { return "• " + x; })).join("\n"));
     }
 
     function mountAnswer(a) {
@@ -2881,7 +2893,9 @@
         const src = Array.from(new Set(a.hits.map(function (h) { return h.doc; }))).join(" · ");
         kbBlock = el("details", { class: "kb" },
           el("summary", null, kbHeadline(a.hits), el("span", { class: "kb-src", text: src })));
-        a.hits.forEach(function (h) { kbBlock.appendChild(el("div", { class: "kb-snip", text: h.text })); });
+        a.hits.forEach(function (h, i) {
+          kbBlock.appendChild(el("div", { class: "kb-snip", "data-i": String(i) }, el("span", { class: "kb-num", text: "[" + (i + 1) + "] " + docLabel(h.doc) }), document.createTextNode(h.text)));
+        });
       }
 
       const actions = el("div", { class: "row", style: "gap: 6px;" });
@@ -2919,6 +2933,7 @@
       } });
       actions.appendChild(copyBtn);
 
+      refs.kb = kbBlock;
       refs.card = el("article", { class: "answer" + (a.spec ? " spec" : "") + (a.auto && !a.caughtShown ? " caught" : "") },
         el("div", { class: "q" },
           el("span", { class: "q-tag", text: a.spec ? "预判中" : (KIND_LABELS[a.kind] || a.followLabel || "对方问") }),
@@ -2954,9 +2969,9 @@
       } else if (a.text) {
         const p = parseAnswer(a.text);
         r.lead.classList.remove("placeholder", "prepared", "prev");
-        r.lead.textContent = p.lead;
+        setCited(r.lead, p.lead, a, false);
         r.script.hidden = !p.script;
-        r.script.textContent = p.script;
+        setCited(r.script, p.script, a, true);
         r.script.classList.toggle("caret", streaming && Boolean(p.script) && !p.points.length);
         r.points.replaceChildren();
         // Once you start answering, the first point you haven't covered is highlighted as "Next".
@@ -2965,8 +2980,11 @@
           for (let i = 0; i < p.points.length; i++) { if (!(a.covered && a.covered[i])) { nextIdx = i; break; } }
         }
         p.points.forEach(function (pt, i) {
-          r.points.appendChild(el("li", { class: a.covered && a.covered[i] ? "covered" : (i === nextIdx ? "next" : null), text: pt }));
+          const li = el("li", { class: a.covered && a.covered[i] ? "covered" : (i === nextIdx ? "next" : null) });
+          setCited(li, pt, a, !streaming);
+          r.points.appendChild(li);
         });
+        if (!streaming && r.kb) markCitedSources(a, a.text);
         r.lead.classList.toggle("caret", streaming && !p.points.length && !p.script);
         const lastLi = r.points.lastChild;
         if (lastLi && streaming) lastLi.classList.add("caret");
@@ -3085,7 +3103,7 @@
         heardAt: opts.trigger ? (opts.trigger.at || 0) : 0,
         speechEndAt: opts.trigger ? (S.lastInterimAt[opts.trigger.ch] || 0) : 0,
         followLabel: opts.followLabel || "",
-        hits: opts.presetHits || (opts.kind && opts.kind !== "answer" ? [] : smartRetrieve(q + (opts.base ? " " + opts.base.question : ""), 2)),
+        hits: opts.presetHits || (opts.kind && opts.kind !== "answer" ? [] : smartRetrieve(retrievalQuery(q, opts), 3)),
         subqs: opts.kind && opts.kind !== "answer" ? [] : splitQuestions(opts.displayQuestion || q),
         bridge: opts.kind && opts.kind !== "answer" ? "" : bridgeLine(q),
         cue: $("lengthSel").value === "cue",
@@ -4963,7 +4981,7 @@
       if (!semUsable() || !S.docs.length || semCachedVec(q)) return;
       const v = await semEmbedQuery(q);
       if (!v || S.current !== a || a.text) return;
-      const better = smartRetrieve(q, 2);
+      const better = smartRetrieve(q, 3);
       if (!better.length || (a.hits[0] && a.hits[0].text === better[0].text)) return;
       if (!a.hits.length && a.status === "streaming") {
         S.answers = S.answers.filter(function (x) { return x !== a; });
@@ -5167,7 +5185,7 @@
       const a = S.current;
       if (!a || a.kind !== "answer" || !a.text || a.status === "streaming") return "";
       const pts = parseAnswer(a.text).points;
-      for (let i = 0; i < pts.length; i++) if (!(a.covered && a.covered[i])) return pts[i];
+      for (let i = 0; i < pts.length; i++) if (!(a.covered && a.covered[i])) return stripCites(pts[i]);
       return "";
     }
     function hudTip(secs, pace, isZh, fill, hedges, all) {
@@ -5962,6 +5980,63 @@
       if (d.showModal) d.showModal(); else d.setAttribute("open", "");
     }
     $("btnKeysClose").addEventListener("click", function () { $("keysDialog").close(); });
+
+
+    // =====================================================================
+    // 15a10. Grounding: citations back to your materials
+    // =====================================================================
+    function stripCites(t) { return String(t || "").replace(/\s?\[\d{1,2}\]/g, ""); }
+    // Short follow-ups ("and how long does that take?") borrow the previous turn for keyword search.
+    function retrievalQuery(q, opts) {
+      let extra = opts && opts.base ? " " + opts.base.question : "";
+      if (q.length < 30) {
+        const prior = S.utts.filter(function (u) { return u.ch !== "mic" && u.text !== q; }).slice(-2).map(function (u) { return u.text; }).join(" ");
+        extra += " " + prior.slice(-200);
+      }
+      return (q + extra).trim();
+    }
+    // Renders text with clickable [n] chips that open the matching passage. With checkUncited, a sentence
+    // that states a number but cites nothing (while materials were available) gets a small warning.
+    function setCited(node, text, a, checkUncited) {
+      node.replaceChildren();
+      const strictCheck = checkUncited && S.strictKb && a.hits && a.hits.length;
+      const sentences = strictCheck ? splitSentences(text) : [text];
+      sentences.forEach(function (sentence, si) {
+        if (si > 0) node.appendChild(document.createTextNode(" "));
+        String(sentence).split(/(\[\d{1,2}\])/).forEach(function (part) {
+          const m = /^\[(\d{1,2})\]$/.exec(part);
+          if (!m) { if (part) node.appendChild(document.createTextNode(part)); return; }
+          const i = parseInt(m[1], 10) - 1;
+          const h = a.hits && a.hits[i];
+          if (!h) return;   // drop citations to passages that weren't provided
+          node.appendChild(el("button", { class: "cite", type: "button", title: docLabel(h.doc), text: String(i + 1),
+            onclick: function (ev) { ev.stopPropagation(); showSource(a, i); } }));
+        });
+        if (strictCheck && /\d/.test(sentence) && !/\[\d{1,2}\]/.test(sentence)) {
+          node.appendChild(el("span", { class: "uncited", title: S.uiLang === "en" ? "This number isn't from your materials. Double-check before saying it." : "这个数字不在你的资料里，说之前确认一下。", text: "⚠" }));
+        }
+      });
+    }
+    function showSource(a, i) {
+      const kb = a.refs && a.refs.kb;
+      if (!kb) return;
+      kb.open = true;
+      const snip = kb.querySelector('.kb-snip[data-i="' + i + '"]');
+      if (!snip) return;
+      snip.classList.remove("flash"); void snip.offsetWidth; snip.classList.add("flash");
+      snip.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+    function markCitedSources(a, text) {
+      const used = new Set();
+      (String(text).match(/\[(\d{1,2})\]/g) || []).forEach(function (m) { used.add(parseInt(m.slice(1, -1), 10) - 1); });
+      Array.prototype.forEach.call(a.refs.kb.querySelectorAll(".kb-snip"), function (sn) {
+        sn.classList.toggle("cited", used.has(parseInt(sn.dataset.i, 10)));
+      });
+      const sum = a.refs.kb.querySelector("summary .kb-used");
+      const label = used.size ? (S.uiLang === "en" ? "cited " : "引用了 ") + Array.from(used).sort().map(function (i) { return "[" + (i + 1) + "]"; }).join("") : (S.uiLang === "en" ? "not cited" : "回答没有引用");
+      if (sum) sum.textContent = label;
+      else a.refs.kb.querySelector("summary").appendChild(el("span", { class: "kb-used u", text: label }));
+    }
 
     // =====================================================================
     // 15c. Interface language (中文 / English)

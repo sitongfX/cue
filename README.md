@@ -39,6 +39,7 @@ It's a single web page: no server, no build step. Everything runs in your browse
 - **Tell you and them apart with the mic only (experimental)**: read one line so Cue learns how loud you are; quieter voices (speakers, across the table) are labelled as the other side.
 - **Talk-time and filler meter**: shows how much of the conversation you've been talking, counts filler words (um, you know, 嗯, 那个), and nudges you gently.
 - **Your materials, not made-up facts**: paste product docs, project notes or FAQs. The AI is told to use only your facts and numbers.
+- **Citations you can check**: answers mark every fact taken from your materials with a clickable [n] that opens the exact passage; a number with no source gets a ⚠ so you double-check before saying it. The materials block shows which passages were actually cited.
 - **Search by meaning, with instant prepared answers**: with a Gemini key, every passage is embedded once (`gemini-embedding-001`, cached in your browser), and the question is embedded while it's still being asked. Paraphrased questions still find the right passage, and when it matches a Q&A in your materials the prepared answer appears immediately, before the AI responds. Keyword search is the fallback.
 - **Prep → Practice → Live → Review**
   - *Prep*: generate the 8 questions you're most likely to get and your best answers.
