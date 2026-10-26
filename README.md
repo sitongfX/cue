@@ -14,8 +14,9 @@ It's a single web page: no server, no build step. Everything runs in your browse
 
 ## Features
 
-- **Live transcription of both sides**: your microphone plus the other side's audio from a meeting tab (Chrome on desktop). On phones, the microphone hears everyone in the room.
-- **Automatic answers**: when the other side asks a question (with or without a question mark), an answer starts streaming right away. No hotkey needed; Space also works and uses the words heard so far.
+- **Microphone first, no screen-share prompt**: *Start listening* uses only the microphone. On a call with headphones, tap **+ Meeting audio** at any time to add the meeting tab's sound (Chrome on desktop); Cue keeps the audio and drops the picture. On phones, the microphone hears everyone in the room.
+- **Automatic answers, as early as possible**: when the other side asks a question (with or without a question mark), an answer starts streaming right away. Cue even starts drafting from the words heard so far while they're still finishing the question; if the final question matches, the draft is kept. Each answer shows how fast it was ("Ready before they finished" or "0.6 s after they finished").
+- **Next point to say**: once you start answering, points you've covered are crossed out and the next one is highlighted, updated as you speak.
 - **Live coaching while you speak**: Cue compares what you're saying with the question and your materials, and shows *Add:* (the most important missing point) or *Fix:* (something you got wrong), about a second after you pause.
 - **Talk-time meter**: shows how much of the conversation you've been talking and nudges you if you've been going for a while.
 - **Your materials, not made-up facts**: paste product docs, project notes or FAQs. Matching passages appear instantly, and the AI is told to use only your facts and numbers.
@@ -26,22 +27,24 @@ It's a single web page: no server, no build step. Everything runs in your browse
   - *Review*: what went well, what to improve, and improved answers saved back to your materials.
 - **Ask Cue**: privately ask about the conversation ("what budget did they mention?").
 - **Interface in English or Chinese**, with a separate setting for the answer language.
+- **Follow-up after the call**: when you stop, Cue writes a summary, the other side's questions, commitments (who / what / when) and a ready-to-send follow-up email, saved to History.
+- **Remember key (opt-in)**: keep your API key in this browser, encrypted with a non-extractable AES-GCM key. Uncheck to delete it.
 - **History**: every session is saved in your browser and can be exported as Markdown.
 - **Installable** (PWA) on desktop and phone, with an always-on-top floating window on desktop Chrome.
 
 ## Getting started
 
 1. Open the page in **Chrome** (desktop or Android) or Safari on iOS.
-2. **Settings → Model**: paste any API key. Cue detects the provider automatically (Gemini, SiliconFlow, DeepSeek, Zhipu or Qwen) by its format and by checking which service accepts it. Gemini is recommended; get a key at <https://aistudio.google.com/apikey>.
+2. Paste any API key on the start screen (or **Settings → Model**). Cue detects the provider automatically (Gemini, SiliconFlow, DeepSeek, Zhipu or Qwen) by its format and by checking which service accepts it. Gemini is recommended; get a key at <https://aistudio.google.com/apikey>.
 3. **Settings → Audio → Test microphone** to check permission and input level.
 4. Optional: **Prep** → add your materials.
-5. Press **Start**. In an online meeting, choose the meeting's tab and turn on *Share tab audio*.
+5. Press **Start listening**. With headphones on a call, tap **+ Meeting audio**, pick the meeting's tab and keep *Share tab audio* on.
 
 ## Speech recognition
 
 | Channel | Engine | Notes |
 |---|---|---|
-| The other side (meeting audio) | **Gemini Live streaming** (`gemini-3.5-transcribe-live`) | Audio is streamed continuously over a WebSocket; words appear while they talk and the final sentence about 1 s after they pause. Chinese and English are detected automatically. |
+| The other side (meeting audio) | **Gemini Live streaming** (`gemini-3.5-transcribe-live`) | Audio is streamed in 50 ms frames over a WebSocket with a 300 ms end-of-speech window; words appear while they talk and the final sentence about 0.1–0.3 s after they stop (measured; the default setting took about 0.75 s). Chinese and English are detected automatically. |
 | Your microphone | Browser speech recognition (*Fast recognition*, on by default) | Words appear as you speak; one language at a time (set *Spoken language*). Turn it off or choose *mixed* to use Gemini Live instead. |
 | Without a Gemini key | Browser speech recognition | Chrome versions that can recognize an audio track also transcribe the meeting tab (experimental); otherwise only the microphone works. |
 | Fallback | Gemini (`gemini-3.5-flash-lite`) per phrase | Used automatically if streaming can't connect. |
@@ -50,7 +53,7 @@ Why the other side's audio needs a cloud engine: the browser's built-in recogniz
 
 ## Privacy
 
-- API keys live only in the page's memory and are never stored or sent anywhere except the provider you chose. (The streaming connection passes the key in the WebSocket URL, which is how the Gemini Live API authenticates browsers.)
+- API keys live only in the page's memory unless you turn on *Remember the key*, in which case they're stored encrypted in this browser. They're never sent anywhere except the provider you chose. (The streaming connection passes the key in the WebSocket URL, which is how the Gemini Live API authenticates browsers.)
 - Materials, settings and history are stored in your browser (IndexedDB). *Prep → Clear data in this browser* removes them.
 - Audio is sent only to the transcription provider you configured.
 

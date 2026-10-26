@@ -135,7 +135,9 @@
     .composer-wrap { grid-area: composer; background: var(--panel); border-right: 1px solid var(--line); padding: 0 12px 12px; }
     .col-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 48px; padding: 0 10px 0 18px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
     .col-title { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .6px; text-transform: uppercase; }
-    .col-tools { display: flex; align-items: center; gap: 2px; }
+    .col-tools { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+    .col-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    .col-title .talk { margin-left: 6px; font-size: 11px; letter-spacing: 0; text-transform: none; }
     .seg, .fab { display: none; }
 
     .convo { flex: 1; overflow-y: auto; padding: 16px 14px 8px 18px; display: flex; flex-direction: column; gap: 14px; }
@@ -161,8 +163,31 @@
 
     .stage { flex: 1; overflow-y: auto; padding: 28px clamp(16px, 5vw, 64px) 40px; }
     .stage-inner { max-width: 820px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
-    .ready h1 { font-size: 26px; font-weight: 650; letter-spacing: -.3px; }
-    .ready p.sub { margin-top: 6px; font-size: 14.5px; }
+    .ready h1 { font-size: 28px; font-weight: 680; letter-spacing: -.4px; line-height: 1.25; }
+    .ready p.sub { margin-top: 8px; font-size: 15px; color: var(--text-2); }
+    .hero { padding: 6px 0 2px; }
+    .btn-xl { height: 52px; padding: 0 26px; font-size: 16px; border-radius: 14px; gap: 10px; }
+    .btn-xl svg { width: 20px; height: 20px; }
+    .hero-note { margin-top: 12px; color: var(--muted); font-size: 13px; display: flex; gap: 8px; align-items: flex-start; }
+    .hero-note svg { width: 15px; height: 15px; flex-shrink: 0; margin-top: 2px; color: var(--accent); }
+    .link-btn { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+    .step-key { margin-top: 10px; gap: 8px; flex-wrap: nowrap; }
+    .step-key .input { flex: 1; min-width: 0; height: 36px; }
+    .menu { position: relative; }
+    .menu > summary { list-style: none; cursor: pointer; }
+    .menu > summary::-webkit-details-marker { display: none; }
+    .menu-pop { position: absolute; right: 0; top: 38px; z-index: 30; min-width: 150px; padding: 6px; display: flex; flex-direction: column; gap: 2px; background: var(--raised); border: 1px solid var(--line-2); border-radius: 12px; box-shadow: 0 12px 30px rgba(0,0,0,.35); }
+    .menu-pop .btn { justify-content: flex-start; width: 100%; }
+    .src-chip { height: 32px; border-radius: 999px; }
+    .src-chip svg { width: 14px; height: 14px; }
+    .points li.next { color: var(--text); font-weight: 600; }
+    .points li.next::before { background: var(--accent); opacity: 1; box-shadow: 0 0 0 4px var(--accent-soft); }
+    .points li.next::after { content: "下一点"; margin-left: 8px; font-size: 11px; font-weight: 650; color: var(--accent-ink); background: var(--accent); border-radius: 6px; padding: 1px 6px; vertical-align: 2px; }
+    html[lang="en"] .points li.next::after { content: "Next"; }
+    .points.cues li.next { border-color: var(--accent); }
+    .answer.spec .q-tag { background: transparent; border: 1px dashed var(--line-2); color: var(--muted); }
+    .answer.spec .lead, .answer.spec .points { opacity: .72; }
+    .tab-steps { margin: 14px 0 0 18px; color: var(--text-2); font-size: 13.5px; display: flex; flex-direction: column; gap: 6px; }
     .lifecycle { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; margin-top: 14px; color: var(--muted); font-size: 12.5px; }
     .lifecycle b { color: var(--text-2); font-weight: 600; }
     .lifecycle i { font-style: normal; color: var(--line-2); }
@@ -339,7 +364,11 @@
       .fab.live .ico-stop { display: block; }
       body:not([data-view="live"]) .composer-wrap, body:not([data-view="live"]) .fab { display: none; }
 
-      .ready h1 { font-size: 22px; }
+      .ready h1 { font-size: 23px; }
+      .btn-xl { width: 100%; justify-content: center; }
+      .step .step-key { flex-wrap: nowrap !important; flex-direction: row !important; }
+      #stepAi .step-actions { display: none; }
+      .ready-actions .btn-lg { width: 100%; justify-content: center; }
       .step { padding: 14px; gap: 12px; align-items: flex-start; }
       .step-actions { flex-direction: column; }
       .answer { padding: 18px 16px 14px; border-radius: 16px; }
@@ -377,6 +406,7 @@
     </div>
 
     <div class="top-actions">
+      <button class="btn src-chip" id="btnAddTab" type="button" hidden title="把会议标签页的声音也给 Cue，分清谁在说话（只取声音，不看画面）"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span>会议声音</span></button>
       <button class="btn" id="btnInstall" type="button" hidden title="安装到电脑或手机主屏幕，像普通 App 一样打开">安装</button>
       <button class="icon-btn" id="btnPip" type="button" title="浮窗：把回答放进置顶小窗，放在摄像头旁边">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="12" width="7" height="5" rx="1"/></svg>
@@ -426,9 +456,15 @@
           <div class="col-head">
             <span class="col-title">对话 <span class="talk u" id="talkRatio"></span></span>
             <div class="col-tools">
-              <button class="btn btn-ghost" id="btnSummary" type="button" title="根据目前的对话生成纪要">纪要</button>
+              <button class="btn btn-ghost" id="btnRecap" type="button" title="生成摘要、约定的事项和跟进邮件">跟进</button>
               <button class="btn btn-ghost" id="btnReview" type="button" title="复盘：哪里答得好、哪里可以更好，并把改进后的回答存进资料库">复盘</button>
-              <button class="btn btn-ghost" id="btnExport" type="button" title="导出对话与回答为 Markdown">导出</button>
+              <details class="menu" id="moreMenu">
+                <summary class="btn btn-ghost" title="更多">更多</summary>
+                <div class="menu-pop">
+                  <button class="btn btn-ghost" id="btnSummary" type="button" title="根据目前的对话生成纪要">纪要</button>
+                  <button class="btn btn-ghost" id="btnExport" type="button" title="导出对话与回答为 Markdown">导出 Markdown</button>
+                </div>
+              </details>
               <button class="icon-btn" id="btnClear" type="button" title="清空对话与回答（会先存到「记录」）">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
               </button>
@@ -437,7 +473,7 @@
           <div class="convo" id="convo">
             <div class="convo-empty" id="convoEmpty">
               <strong>对话会实时出现在这里</strong>
-              点「开始」后，对方和你说的话会被自动转写。<br />点任意一句即可让 AI 回答它。
+              点「开始收音」后，大家说的话会实时出现在这里。<br />点任意一句即可让 AI 回答它。
             </div>
             <div class="interim" id="interim" hidden></div>
           </div>
@@ -455,15 +491,25 @@
           <div class="stage" id="stage">
             <div class="stage-inner" id="stageInner">
               <div class="ready" id="ready">
-                <h1>准备好了就开始</h1>
-                <p class="sub">Cue 会听对方说话，在你需要时给出一句可以直接说出口的回答，并引用你自己的资料。</p>
-                <div class="lifecycle"><b>准备</b><i>→</i><b>练习</b><i>→</i><b>实时提示</b><i>→</i><b>复盘</b><i>·</i><span>好的回答自动存进资料库，越用越懂你</span></div>
+                <div class="hero">
+                  <h1>对方一提问，你就有一句能直接说的回答</h1>
+                  <p class="sub">Cue 边听边提示：先答什么、下一点说什么、哪里说错了，全部基于你自己的资料。</p>
+                  <div class="ready-actions">
+                    <button class="btn btn-primary btn-xl" id="btnReadyStart" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span>开始收音</span></button>
+                    <button class="btn btn-lg" id="btnDemo" type="button">先看一个示例</button>
+                  </div>
+                  <p class="hero-note" id="heroNote"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg><span id="heroNoteText">只用麦克风，不会共享屏幕。戴耳机开线上会议时，开始后点顶部的「＋ 会议声音」，让 Cue 也听到对方。</span></p>
+                </div>
                 <div class="steps">
                   <div class="step" id="stepAi">
                     <div class="step-ico">1</div>
                     <div class="step-body">
-                      <div class="step-title">AI 模型</div>
-                      <div class="step-desc" id="stepAiDesc">未设置 · 填入一个 API Key（Gemini / 硅基流动 / DeepSeek / 智谱），或使用本地 Ollama</div>
+                      <div class="step-title">AI Key</div>
+                      <div class="step-desc" id="stepAiDesc">粘贴一个 API Key，自动识别是哪家服务</div>
+                      <div class="row step-key" id="stepKeyRow">
+                        <input class="input" id="readyKey" type="password" placeholder="粘贴 Gemini / 硅基流动 / DeepSeek / 智谱 / 通义 Key" autocomplete="off" />
+                        <button class="btn btn-primary" id="btnReadyKey" type="button">保存</button>
+                      </div>
                     </div>
                     <div class="step-actions"><button class="btn" type="button" data-open-tab="model">设置</button></div>
                   </div>
@@ -481,18 +527,14 @@
                   <div class="step" id="stepAudio">
                     <div class="step-ico">3</div>
                     <div class="step-body">
-                      <div class="step-title">声音来源</div>
-                      <div class="step-desc" id="stepAudioDesc">线上会议 · 你的麦克风 + 电脑里对方的声音</div>
+                      <div class="step-title">声音</div>
+                      <div class="step-desc" id="stepAudioDesc">只用麦克风</div>
                     </div>
                     <div class="step-actions">
                       <button class="btn" type="button" data-mic-test="1">测试麦克风</button>
                       <button class="btn" type="button" data-open-tab="audio">更改</button>
                     </div>
                   </div>
-                </div>
-                <div class="ready-actions">
-                  <button class="btn btn-primary btn-lg" id="btnReadyStart" type="button">开始</button>
-                  <button class="btn btn-lg" id="btnDemo" type="button">先看一个示例</button>
                 </div>
                 <div class="hints">
                   <span><kbd>Space</kbd> 回答对方刚说的</span>
@@ -696,6 +738,7 @@
             <button class="btn btn-primary" id="btnSaveKey" type="button">保存</button>
           </div>
           <span class="help" id="keyHelp">支持 Gemini、硅基流动、DeepSeek、智谱、通义千问，粘贴后自动识别。</span>
+          <label class="row" style="gap: 6px; font-size: 13px; color: var(--text-2); margin-top: 6px;"><input id="chkRememberKey" type="checkbox" style="width: 18px; height: 18px; accent-color: var(--accent);" /> 在这个浏览器记住 Key（加密保存，取消勾选即删除）</label>
         </div>
         <div class="field">
           <span class="label">AI 服务 <span class="help">（自动识别，也可以手动选）</span></span>
@@ -731,13 +774,13 @@
         <div class="field">
           <span class="label">声音来源</span>
           <div class="options single" id="sourceList">
-            <button class="opt active" type="button" data-source="online">
-              <span class="opt-name">线上会议</span>
-              <span class="opt-desc">你的麦克风 + 电脑里对方的声音（Zoom / Meet / 腾讯会议）。开始时选择会议所在的标签页或整个屏幕，并打开「分享音频」。</span>
+            <button class="opt active" type="button" data-source="inperson">
+              <span class="opt-name">只用麦克风（推荐）</span>
+              <span class="opt-desc">点开始直接听，不用共享任何东西。面对面、电脑外放、手机都可以。</span>
             </button>
-            <button class="opt" type="button" data-source="inperson">
-              <span class="opt-name">面对面 / 手机</span>
-              <span class="opt-desc">只用麦克风收现场所有人的声音。手机上只能用这个。</span>
+            <button class="opt" type="button" data-source="online">
+              <span class="opt-name">麦克风 + 会议声音</span>
+              <span class="opt-desc">戴耳机开线上会议时用。开始时浏览器会弹出共享窗口：选会议所在的标签页，并打开「分享标签页音频」。Cue 只取声音，不看画面。</span>
             </button>
             <button class="opt" type="button" data-source="system">
               <span class="opt-name">只听电脑声音</span>
@@ -817,6 +860,20 @@
           </div>
           <input id="chkCoach" type="checkbox" checked />
         </label>
+        <label class="switch">
+          <div>
+            <div class="label">提前起草回答</div>
+            <div class="help">对方还没说完，Cue 就根据已经听到的内容开始起草；说完后意思没变就直接用，回答更快出现。</div>
+          </div>
+          <input id="chkSpec" type="checkbox" checked />
+        </label>
+        <label class="switch">
+          <div>
+            <div class="label">结束后自动生成跟进</div>
+            <div class="help">停止收音后，生成摘要、对方关心的问题、约定的事项和一封跟进邮件，并存进记录。</div>
+          </div>
+          <input id="chkRecap" type="checkbox" checked />
+        </label>
         <div class="field">
           <span class="label">实时翻译对方的话</span>
           <select class="select" id="translateSel">
@@ -836,6 +893,21 @@
   </aside>
 
   <!-- ================= Blocked / insecure origin dialog ================= -->
+  <dialog id="tabDialog">
+    <h3>让 Cue 也听到对方</h3>
+    <p>戴耳机开会时，麦克风听不到对方。把会议标签页的声音交给 Cue，就能分清谁在说话、更快回答。</p>
+    <ol class="tab-steps">
+      <li>接下来浏览器会弹出「共享」窗口，这是浏览器的固定流程</li>
+      <li>选上方的「Chrome 标签页」，点开会议所在的标签页（Meet / Zoom 网页版 / Teams）</li>
+      <li>确认打开「同时分享标签页音频」，再点「共享」</li>
+    </ol>
+    <p>Cue 只取声音，画面会立即丢弃，也不会录制或上传视频。用桌面版 Zoom / 腾讯会议时，请选「整个屏幕」并打开「分享系统音频」（仅 Windows / ChromeOS 支持）。</p>
+    <div class="row" style="margin-top: 18px; justify-content: flex-end; gap: 8px;">
+      <button class="btn" id="btnTabCancel" type="button">先不用</button>
+      <button class="btn btn-primary" id="btnTabGo" type="button">继续</button>
+    </div>
+  </dialog>
+
   <dialog id="insecureDialog">
     <h3 id="insecureTitle">这个网址不能使用麦克风</h3>
     <p id="insecureReason">浏览器只允许 <code>https://</code>、<code>localhost</code> 或本地文件调用麦克风和电脑声音。当前地址是 <code id="originCode"></code>。任选一种方式：</p>
@@ -990,8 +1062,8 @@
     };
 
     const SOURCES = {
-      online: "线上会议 · 你的麦克风 + 电脑里对方的声音",
-      inperson: "面对面 · 麦克风收现场所有人的声音",
+      online: "麦克风 + 会议声音 · 开始时选择会议标签页",
+      inperson: "只用麦克风 · 不需要共享屏幕",
       system: "只听电脑声音 · 不录你的麦克风"
     };
 
@@ -1001,7 +1073,7 @@
       keys: { gemini: "", siliconflow: "", deepseek: "", zhipu: "", qwen: "" },
       server: { ok: false, sttReady: false, gemini: false, deepseek: false, ollama: false },
       ollamaDirect: false,
-      source: "online",
+      source: "inperson",
       autoMode: "question",
       micDevice: "",
       strictKb: true,
@@ -1174,11 +1246,12 @@
 
     function currentSettings() {
       return {
-        provider: S.provider, model: S.model, source: S.source, autoMode: S.autoMode,
+        provider: S.provider, model: S.model, source: S.source, srcV: "2", autoMode: S.autoMode,
         scenario: $("scenarioSel").value, lang: $("langSel").value, length: $("lengthSel").value,
         background: $("bgInput").value, strictKb: S.strictKb ? "1" : "0", micDevice: S.micDevice,
         uiLang: S.uiLang, spokenLang: $("spokenLang").value, fastMic: $("chkFastMic").checked ? "1" : "0",
-        translate: $("translateSel").value, liveStt: $("chkLiveStt").checked ? "1" : "0", coach: $("chkCoach").checked ? "1" : "0"
+        translate: $("translateSel").value, liveStt: $("chkLiveStt").checked ? "1" : "0", coach: $("chkCoach").checked ? "1" : "0",
+        spec: $("chkSpec").checked ? "1" : "0", recap: $("chkRecap").checked ? "1" : "0"
       };
     }
 
@@ -1186,7 +1259,8 @@
       if (!st) return;
       if (st.provider && PROVIDERS[st.provider]) S.provider = st.provider;
       if (st.model) S.model = st.model;
-      if (st.source && SOURCES[st.source]) S.source = st.source;
+      // v2: "mic only" became the default, so older saved "online" settings no longer open a screen-share prompt.
+      if (st.source && SOURCES[st.source] && (st.srcV === "2" || st.source !== "online")) S.source = st.source;
       applyDeviceLimits();
       if (st.autoMode) { S.autoMode = st.autoMode; $("autoMode").value = st.autoMode; }
       if (st.scenario) $("scenarioSel").value = st.scenario === "interview" ? "presentation" : st.scenario;
@@ -1195,6 +1269,8 @@
       if (st.translate) $("translateSel").value = st.translate;
       if (st.liveStt) $("chkLiveStt").checked = st.liveStt === "1";
       if (st.coach) $("chkCoach").checked = st.coach === "1";
+      if (st.spec) $("chkSpec").checked = st.spec === "1";
+      if (st.recap) $("chkRecap").checked = st.recap === "1";
       if (st.uiLang && st.uiLang !== S.uiLang) setUiLang(st.uiLang, true);
       if (st.lang) $("langSel").value = st.lang;
       if (st.length) $("lengthSel").value = st.length;
@@ -1452,7 +1528,8 @@
       $("stepAudio").dataset.n = "3";
       const p = PROVIDERS[S.provider];
       if (aiReady()) setStep("stepAi", "done", "已连接 " + p.name + " · " + S.model);
-      else setStep("stepAi", "todo", "未设置 · 填入一个 API Key（Gemini / 硅基流动 / DeepSeek / 智谱），或使用本地 Ollama");
+      else setStep("stepAi", "todo", "粘贴一个 API Key，自动识别是哪家服务");
+      $("stepKeyRow").hidden = aiReady();
 
       $("btnPrep").hidden = !S.docs.length;
       if (S.docs.length) setStep("stepKb", "done", "已添加 " + S.docs.length + " 份：" + S.docs.map(function (d) { return d.name; }).join("、"));
@@ -1484,10 +1561,13 @@
 
     function refreshStatus() {
       if (S.current && S.current.status === "streaming") setStatus("thinking", "正在生成回答…");
+      else if (S.listening && S.liveRecon && Object.keys(S.liveRecon).some(function (k) { return S.liveRecon[k]; })) setStatus("thinking", "网络波动，正在重连…");
       else if (S.listening) setStatus("live", "正在听");
       else setStatus("idle", "未开始");
       $("timerText").hidden = !S.listening;
       $("meters").hidden = !S.listening;
+      $("meterSpk").closest(".meter").hidden = !S.spk;
+      $("btnAddTab").hidden = !(S.listening && CAN_SHARE_AUDIO && !S.spk && S.source !== "system");
       $("btnStartLabel").textContent = S.listening ? "停止" : "开始";
       $("btnFab").classList.toggle("live", S.listening);
       $("btnFab").setAttribute("aria-label", S.listening ? "停止收音" : "开始收音");
@@ -1544,15 +1624,17 @@
     }
 
     function addUtterance(ch, rawText) {
+      if (ch === "room" && S.spk) ch = "mic";
       const text = (rawText || "").replace(/\s+/g, " ").trim();
       if (!text || text.length < 2) return null;
       if (HALLUCINATIONS.some(function (h) { return text.indexOf(h) !== -1; })) return null;
       if (isEcho(ch, text)) return null;
-      if (ch === "mic") { markCoveredPoints(text); scheduleCoach(); }
+      // Mic-only mode can't tell voices apart: statements right after an answer are treated as you answering.
+      if (ch === "mic" || (ch === "room" && !looksLikeQuestion(text))) { markCoveredPoints(text); scheduleCoach(); }
       noteTalk(ch, text);
+      const now = Date.now();
 
       $("convoEmpty").hidden = true;
-      const now = Date.now();
       const last = S.utts[S.utts.length - 1];
       let u;
       if (last && last.ch === ch && now - last.at < 2500 && !/[。！？!?.]$/.test(last.text)) {
@@ -1577,18 +1659,25 @@
       convo.scrollTop = convo.scrollHeight;
       scheduleTranslate(u);
 
+      if (ch !== "mic" && SPEC.timer) { clearTimeout(SPEC.timer); SPEC.timer = null; }
+      if (ch !== "mic") S.lastFinalAt = now;
       if (ch !== "mic" && S.autoMode !== "off") {
         if (S.autoTimer) clearTimeout(S.autoTimer);
         const turn = latestTheirTurn();
         const isQ = looksLikeQuestion(turn);
         // Questions: answer almost immediately (and refine if they keep talking).
         // "Every turn" mode: also answer statements once they pause for a moment.
-        const delay = isQ ? 150 : (S.autoMode === "turn" && turn.length >= 8 ? 1100 : -1);
+        const delay = isQ ? 60 : (S.autoMode === "turn" && turn.length >= 8 ? 1100 : -1);
         if (delay >= 0) {
           S.autoTimer = setTimeout(function () {
             if (S.pending > 0 && delay > 200) return;
             if (S.current && S.current.status === "streaming" && S.current.kind !== "answer") return;
             const q = latestTheirTurn();
+            const cur = S.current;
+            if (q && cur && cur.spec && cur.status !== "error" && cur.status !== "aborted" && sameQuestion(q, cur.question)) {
+              confirmSpec(cur, q);   // the early draft already answers this; keep it
+              return;
+            }
             if (q && q !== S.lastAutoQ) {
               S.lastAutoQ = q;
               answer(q, { auto: true });
@@ -1600,11 +1689,12 @@
     }
 
     // While you talk, points you have already covered are crossed out so you only see what's left.
-    function markCoveredPoints(spoken) {
+    function markCoveredPoints(spoken, preview) {
       const a = S.current;
       if (!a || a.kind !== "answer" || !a.text || Date.now() - a.id > 120000) return;
-      a.spoken = ((a.spoken || "") + " " + spoken).slice(-1500);
-      const said = a.spoken.replace(/\s+/g, "").toLowerCase();
+      if (!preview) a.spoken = ((a.spoken || "") + " " + spoken).slice(-1500);
+      a.talking = true;
+      const said = ((a.spoken || "") + (preview ? " " + spoken : "")).replace(/\s+/g, "").toLowerCase();
       const points = parseAnswer(a.text).points;
       a.covered = a.covered || {};
       let changed = false;
@@ -1615,7 +1705,7 @@
         const hit = keys.filter(function (k) { return said.indexOf(k) !== -1; }).length;
         if (hit / keys.length >= 0.45) { a.covered[i] = true; changed = true; }
       });
-      if (changed) updateAnswer(a);
+      if (changed || !a.nextShown) { a.nextShown = true; updateAnswer(a); }
     }
 
     function latestTheirTurn() {
@@ -1901,6 +1991,9 @@
           else interim += r[0].transcript;
         }
         showInterim(interim);
+        if (ch === "room" && S.spk) ch = "mic";
+        if (interim && ch !== "spk" && !looksLikeQuestion(interim)) markCoveredPoints(interim, true);
+        if (ch !== "mic") { S.liveInterim[ch] = interim; if (interim) maybeSpeculate(ch, interim); }
       };
       rec.onend = function () {
         if (S.listening && S.recog === rec) { try { rec.start(); } catch (_) {} }
@@ -1963,34 +2056,7 @@
       const wantSpk = S.source === "online" || S.source === "system";
       const wantMic = S.source !== "system";
 
-      if (wantSpk) {
-        try {
-          const ds = await navigator.mediaDevices.getDisplayMedia({
-            video: true,
-            audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-            systemAudio: "include"
-          });
-          const audio = ds.getAudioTracks();
-          ds.getVideoTracks().forEach(function (t) { t.stop(); });
-          if (!audio.length) {
-            toast("没有收到声音：分享时请选择会议所在的标签页，并打开「分享标签页音频」。", 7000);
-          } else {
-            const spkStream = new MediaStream(audio);
-            const spkEnded = function () { S.spk = null; if (!S.mic && S.listening) stopListening(); };
-            const spkSegments = function (st) {
-              return createCapture(st, $("meterSpk"), function (wav) { onSegment("spk", wav); }, spkEnded);
-            };
-            if (liveSttUsable()) {
-              S.spk = createLiveTranscriber("spk", spkStream, $("meterSpk"), spkEnded, function (st) { S.spk = spkSegments(st); });
-            } else {
-              S.spk = spkSegments(spkStream);
-              if (sttRoute() === "browser" && trackRecognitionUsable()) startTrackRecognition("spk", audio[0]);
-            }
-          }
-        } catch (_) {
-          toast("已取消分享电脑声音" + (wantMic ? "，只使用麦克风。" : "。"));
-        }
-      }
+      if (wantSpk) await connectMeetingAudio(!wantMic);
 
       if (wantMic) {
         try {
@@ -2032,7 +2098,9 @@
       }, 1000);
       $("ready").hidden = true;
       refreshStatus();
-      toast(S.autoMode === "off" ? "开始听了。需要回答时按 Space。" : "开始听了。对方说完就会自动出回答，不用按键。");
+      toast(S.autoMode === "off" ? "开始听了。需要回答时按 Space。" : (S.spk || !CAN_SHARE_AUDIO
+        ? "开始听了。对方一提问就会自动出回答。"
+        : "开始听了。戴耳机开线上会议的话，点顶部「＋ 会议声音」让 Cue 听到对方。"), 5000);
     }
 
     async function refreshMicDevices() {
@@ -2106,7 +2174,8 @@
       S.mic = null; S.spk = null;
       S.liveInterim = {};
       if (S.timerHandle) clearInterval(S.timerHandle);
-      if (S.utts.length >= 4) toast("已停止。点左上方「复盘」看看哪里可以答得更好，好的回答会存进资料库。", 6000);
+      if (S.utts.length >= 4 && $("chkRecap").checked && aiReady()) setTimeout(function () { recap(true); }, 400);
+      else if (S.utts.length >= 4) toast("已停止。点「跟进」生成摘要和跟进邮件，点「复盘」看看哪里可以答得更好。", 6000);
       archiveSession();
       saveSessionLocal();
       releaseWakeLock();
@@ -2340,7 +2409,7 @@
       let kbBlock = null;
       if (a.hits.length) {
         const src = Array.from(new Set(a.hits.map(function (h) { return h.doc; }))).join(" · ");
-        kbBlock = el("details", { class: "kb", open: !window.matchMedia("(max-width: 760px)").matches },
+        kbBlock = el("details", { class: "kb" },
           el("summary", null, kbHeadline(a.hits), el("span", { class: "kb-src", text: src })));
         a.hits.forEach(function (h) { kbBlock.appendChild(el("div", { class: "kb-snip", text: h.text })); });
       }
@@ -2351,6 +2420,17 @@
           const n = saveReviewToKb(a);
           ev.currentTarget.textContent = n ? "已存入 " + n + " 条" : "没有找到可存的问答";
         } }));
+      }
+      if (a.kind === "recap") {
+        const mailBtn = el("button", { class: "chip", type: "button", text: "复制邮件", onclick: function () {
+          const mail = recapEmail(a.text);
+          if (!mail || !navigator.clipboard) return;
+          navigator.clipboard.writeText(mail).then(function () {
+            mailBtn.textContent = "已复制";
+            setTimeout(function () { mailBtn.textContent = "复制邮件"; }, 1400);
+          }).catch(function () {});
+        } });
+        actions.appendChild(mailBtn);
       }
       if (a.kind === "answer") {
         FOLLOWUPS.forEach(function (f) {
@@ -2367,16 +2447,16 @@
       } });
       actions.appendChild(copyBtn);
 
-      refs.card = el("article", { class: "answer" },
+      refs.card = el("article", { class: "answer" + (a.spec ? " spec" : "") },
         el("div", { class: "q" },
-          el("span", { class: "q-tag", text: KIND_LABELS[a.kind] || a.followLabel || "对方问" }),
+          el("span", { class: "q-tag", text: a.spec ? "预判中" : (KIND_LABELS[a.kind] || a.followLabel || "对方问") }),
           el("div", { class: "q-text", text: a.question })),
-        kbBlock,
+        refs.coach,
         refs.lead,
         refs.points,
         refs.raw,
-        refs.coach,
         refs.needsAi,
+        kbBlock,
         el("div", { class: "answer-foot" }, refs.meta, actions));
       host.appendChild(refs.card);
       a.refs = refs;
@@ -2399,8 +2479,13 @@
         r.lead.classList.remove("placeholder", "prepared");
         r.lead.textContent = p.lead;
         r.points.replaceChildren();
+        // Once you start answering, the first point you haven't covered is highlighted as "Next".
+        let nextIdx = -1;
+        if (a.talking && !streaming) {
+          for (let i = 0; i < p.points.length; i++) { if (!(a.covered && a.covered[i])) { nextIdx = i; break; } }
+        }
         p.points.forEach(function (pt, i) {
-          r.points.appendChild(el("li", { class: a.covered && a.covered[i] ? "covered" : null, text: pt }));
+          r.points.appendChild(el("li", { class: a.covered && a.covered[i] ? "covered" : (i === nextIdx ? "next" : null), text: pt }));
         });
         r.lead.classList.toggle("caret", streaming && !p.points.length);
         const lastLi = r.points.lastChild;
@@ -2415,7 +2500,7 @@
       if (a.status === "aborted") {
         r.meta.textContent = "已被新的问题打断";
       } else if (a.status === "done") {
-        r.meta.textContent = (a.ttft ? (a.ttft / 1000).toFixed(1) + " 秒出首字 · " : "") + a.model;
+        r.meta.textContent = speedText(a) + a.model;
       } else if (streaming) {
         r.meta.textContent = "生成中…";
       } else if (a.status === "error") {
@@ -2423,6 +2508,17 @@
       } else {
         r.meta.textContent = "";
       }
+    }
+
+    // "Ready before they finished" / "0.6 s after they finished": the latency that matters in a live talk.
+    function speedText(a) {
+      const en = S.uiLang === "en";
+      if (a.finalAt && a.firstAt) {
+        const lag = (a.firstAt - a.finalAt) / 1000;
+        if (lag <= 0.05) return en ? "Ready before they finished · " : "对方说完前就已就绪 · ";
+        return en ? lag.toFixed(1) + " s after they finished · " : "对方说完 " + lag.toFixed(1) + " 秒后出字 · ";
+      }
+      return a.ttft ? (en ? (a.ttft / 1000).toFixed(1) + " s to first words · " : (a.ttft / 1000).toFixed(1) + " 秒出首字 · ") : "";
     }
 
     function renderHistory() {
@@ -2455,15 +2551,17 @@
       setPane("stage");
       if (opts.auto && navigator.vibrate) { try { navigator.vibrate(30); } catch (_) {} }
       // The other side kept talking: replace the earlier draft instead of piling up history.
-      if (opts.auto && S.current && S.current.auto && q.indexOf(S.current.question) === 0) {
+      if (opts.auto && S.current && S.current.auto && (S.current.spec || q.indexOf(S.current.question) === 0)) {
         S.answers = S.answers.filter(function (x) { return x !== S.current; });
       }
 
       const a = {
         id: Date.now(),
+        finalAt: opts.auto && !opts.spec ? (S.lastFinalAt || 0) : 0,
         question: opts.displayQuestion || q,
         kind: opts.kind || "answer",
         auto: Boolean(opts.auto),
+        spec: Boolean(opts.spec),
         followLabel: opts.followLabel || "",
         hits: opts.kind && opts.kind !== "answer" ? [] : retrieve(q + " " + (opts.base ? opts.base.question : ""), 2),
         cue: $("lengthSel").value === "cue",
@@ -2495,7 +2593,7 @@
       const t0 = performance.now();
       try {
         await streamAnswer(opts.system || systemText(), opts.user || userText(q, a.hits, opts.extra), ctl.signal, function (delta) {
-          if (!a.ttft) a.ttft = performance.now() - t0;
+          if (!a.ttft) { a.ttft = performance.now() - t0; a.firstAt = Date.now(); }
           a.text += delta;
           updateAnswer(a);
         });
@@ -2522,8 +2620,8 @@
       });
     }
 
-    const KIND_LABELS = { summary: "纪要", prep: "演练", review: "复盘", ask: "问 Cue", translate: "翻译" };
-    const RAW_KINDS = { prep: true, review: true, ask: true };
+    const KIND_LABELS = { summary: "纪要", prep: "演练", review: "复盘", ask: "问 Cue", translate: "翻译", recap: "跟进" };
+    const RAW_KINDS = { prep: true, review: true, ask: true, recap: true };
     const PREP_DOC = "预演 · 可能被问的问题";
 
     function kbHeadline(hits) {
@@ -2812,6 +2910,7 @@
       renderProviders();
       renderReady();
       persistKb();
+      if ($("chkRememberKey").checked) vaultSave().catch(function () { toast("这个浏览器不能加密保存 Key。"); });
       toast(det.verified
         ? "已识别为 " + PROVIDERS[p].name + "，Key 可以用。"
         : "没能验证这个 Key（可能无效，或网络不通）。按格式先当作 " + PROVIDERS[p].name + "，不对的话请在下面手动选择。", det.verified ? 3800 : 7000);
@@ -3016,7 +3115,7 @@
     if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
       navigator.mediaDevices.addEventListener("devicechange", refreshMicDevices);
     }
-    ["scenarioSel", "langSel", "lengthSel", "bgInput", "chkStrict", "modelInput", "spokenLang", "chkFastMic", "translateSel", "chkLiveStt", "chkCoach"].forEach(function (id) {
+    ["scenarioSel", "langSel", "lengthSel", "bgInput", "chkStrict", "modelInput", "spokenLang", "chkFastMic", "translateSel", "chkLiveStt", "chkCoach", "chkSpec", "chkRecap"].forEach(function (id) {
       $(id).addEventListener("change", persistKb);
     });
     $("scenarioSel").addEventListener("change", function () {
@@ -3041,6 +3140,7 @@
 
     $("btnSummary").addEventListener("click", summarize);
     $("btnReview").addEventListener("click", review);
+    $("btnRecap").addEventListener("click", function () { recap(false); });
     $("btnPrep").addEventListener("click", prepare);
     $("btnExport").addEventListener("click", exportMarkdown);
     $("btnClear").addEventListener("click", function () {
@@ -3049,7 +3149,7 @@
       if (S.autoTimer) clearTimeout(S.autoTimer);
       Object.keys(sttQueues).forEach(function (k) { sttQueues[k].items.forEach(function (it) { it.text = ""; }); });
       S.utts.forEach(function (u) { if (u.el) u.el.remove(); });
-      S.utts = []; S.answers = []; S.current = null; S.lastAutoQ = "";
+      S.utts = []; S.answers = []; S.current = null; S.lastAutoQ = ""; S.sessId = 0;
       TALK.me = 0; TALK.them = 0; TALK.run = 0; updateTalk();
       $("answerHost").replaceChildren();
       $("convoEmpty").hidden = false;
@@ -3104,8 +3204,8 @@
       navigator.serviceWorker.register("./sw.js").catch(function () {});
     }
     $("btnForgetLocal").addEventListener("click", function () {
-      idbDo("readwrite", function (st) { st.delete("sessions"); return st.delete("state"); })
-        .then(function () { toast("已清除这个浏览器里保存的资料和设置（当前页面里的内容不受影响）。"); })
+      idbDo("readwrite", function (st) { st.delete("sessions"); st.delete(VAULT); return st.delete("state"); })
+        .then(function () { $("chkRememberKey").checked = false; toast("已清除这个浏览器里保存的资料、设置和 Key（当前页面里的内容不受影响）。"); })
         .catch(function () {});
     });
     window.addEventListener("beforeunload", function (ev) {
@@ -3255,7 +3355,7 @@
       lastSavedSig = sig;
       const firstQ = S.utts.find(function (u) { return u.ch !== "mic" && looksLikeQuestion(u.text); }) || S.utts[0];
       const rec = {
-        id: Date.now(),
+        id: S.sessId || (S.sessId = Date.now()),
         at: new Date().toLocaleString(),
         title: firstQ.text.slice(0, 80),
         turns: S.utts.length,
@@ -3263,7 +3363,7 @@
         markdown: buildMarkdown()
       };
       try {
-        const list = await loadSessions();
+        const list = (await loadSessions()).filter(function (x) { return x.id !== rec.id; });
         list.unshift(rec);
         await idbDo("readwrite", function (st) { return st.put(list.slice(0, 60), "sessions"); });
       } catch (_) { /* storage unavailable (e.g. sandboxed page) */ }
@@ -3536,7 +3636,7 @@
       if (ctx.state === "suspended" && ctx.resume) ctx.resume().catch(function () {});
       const rate = ctx.sampleRate;
       const src = ctx.createMediaStreamSource(stream);
-      const proc = ctx.createScriptProcessor(2048, 1, 1);
+      const proc = ctx.createScriptProcessor(rate > 24000 ? 2048 : 1024, 1, 1);
       const mute = ctx.createGain();
       mute.gain.value = 0;
       let ws = null, ready = false, stopped = false, everReady = false, retries = 0;
@@ -3546,7 +3646,7 @@
       function send(b64) {
         const msg = JSON.stringify({ realtimeInput: { audio: { data: b64, mimeType: "audio/pcm;rate=16000" } } });
         if (ready && ws && ws.readyState === 1) ws.send(msg);
-        else { queue.push(msg); if (queue.length > 40) queue.shift(); }   // keep the last ~4 s while (re)connecting
+        else { queue.push(msg); if (queue.length > 80) queue.shift(); }   // keep the last ~8 s while (re)connecting
       }
 
       function connect() {
@@ -3558,14 +3658,23 @@
           sock.send(JSON.stringify({ setup: {
             model: "models/" + LIVE_STT_MODEL,
             generationConfig: { responseModalities: ["TEXT"] },
+            realtimeInputConfig: { automaticActivityDetection: { endOfSpeechSensitivity: "END_SENSITIVITY_HIGH", silenceDurationMs: 300 } },
             inputAudioTranscription: {}
           } }));
         };
         sock.onmessage = async function (ev) {
           let m;
           try { m = JSON.parse(typeof ev.data === "string" ? ev.data : await ev.data.text()); } catch (_) { return; }
+          if (m.goAway) {
+            // The server is about to end this session: open a fresh one now so no words are lost.
+            const old = sock;
+            connect();
+            setTimeout(function () { try { old.close(); } catch (_) {} }, 2500);
+            return;
+          }
           if (m.setupComplete) {
             ready = true; everReady = true; retries = 0;
+            if (S.liveRecon && S.liveRecon[ch]) { S.liveRecon[ch] = false; refreshStatus(); }
             while (queue.length && sock.readyState === 1) sock.send(queue.shift());
             return;
           }
@@ -3580,6 +3689,8 @@
           } else if (mid) {
             S.liveInterim[ch] = mid;
             showInterim(interimPrefix(ch) + mid);
+            if (ch !== "spk" && !looksLikeQuestion(mid)) markCoveredPoints(mid, true);
+            if (ch !== "mic") maybeSpeculate(ch, mid);
           }
         };
         sock.onclose = function () {
@@ -3587,8 +3698,15 @@
           ready = false;
           if (stopped) return;
           if (!everReady && retries >= 1) { giveUp(); return; }
-          if (retries++ < 6) setTimeout(function () { if (!stopped) connect(); }, 300 * retries);
-          else giveUp();
+          retries++;
+          if (everReady && retries <= 60) {
+            // Keep reconnecting (up to ~5 min); the last few seconds of audio are buffered meanwhile.
+            S.liveRecon = S.liveRecon || {};
+            if (!S.liveRecon[ch]) { S.liveRecon[ch] = true; refreshStatus(); }
+            setTimeout(function () { if (!stopped) connect(); }, Math.min(5000, 300 * retries));
+          } else if (!everReady && retries <= 1) {
+            setTimeout(function () { if (!stopped) connect(); }, 300);
+          } else giveUp();
         };
         sock.onerror = function () { /* onclose handles reconnects */ };
       }
@@ -3607,7 +3725,7 @@
         if (meterEl) meterEl.style.transform = "scaleX(" + Math.min(1, Math.sqrt(sum / input.length) * 9).toFixed(3) + ")";
         const s16 = downsample(new Float32Array(input), rate);
         pending.push(s16); pendingLen += s16.length;
-        if (pendingLen >= 1600) {   // send every ~100 ms
+        if (pendingLen >= 800) {   // send every ~50 ms
           const pcm = new Int16Array(pendingLen);
           let o = 0;
           pending.forEach(function (c) {
@@ -3628,6 +3746,7 @@
       function teardown(stopTracks) {
         stopped = true;
         try { if (ws) ws.close(); } catch (_) {}
+        if (S.liveRecon && S.liveRecon[ch]) { S.liveRecon[ch] = false; refreshStatus(); }
         try { proc.disconnect(); src.disconnect(); mute.disconnect(); } catch (_) {}
         try { ctx.close(); } catch (_) {}
         if (meterEl) meterEl.style.transform = "scaleX(0)";
@@ -3657,6 +3776,7 @@
         }
         S.liveInterim[ch] = interim;
         showInterim(interim ? interimPrefix(ch) + interim : "");
+        if (interim) maybeSpeculate(ch, interim);
       };
       rec.onend = function () {
         if (S.listening && S.trackRecs.indexOf(rec) !== -1 && track.readyState === "live") {
@@ -3683,7 +3803,7 @@
       if (!a || a.kind !== "answer" || !a.text || !a.spoken || a.status === "streaming") return;
       if (a.spoken.replace(/\s+/g, "").length < 8) return;
       clearTimeout(COACH.timer);
-      COACH.timer = setTimeout(function () { runCoach(a); }, 1400);
+      COACH.timer = setTimeout(function () { runCoach(a); }, 900);
     }
 
     async function runCoach(a) {
@@ -3762,6 +3882,192 @@
       box.textContent = S.uiLang === "en" ? "Me " + me + "% · Them " + (100 - me) + "%" : "我 " + me + "% · 对方 " + (100 - me) + "%";
       box.classList.toggle("warn", me > 65);
     }
+
+
+    // =====================================================================
+    // 15a2. Remember key (opt-in), early drafts, follow-up recap
+    // =====================================================================
+    // The key is encrypted with a random AES-GCM key that the browser marks non-extractable,
+    // and both are kept in this site's IndexedDB. Unchecking the box deletes them.
+    const VAULT = "vault";
+    function savedKeys() {
+      const out = {};
+      Object.keys(S.keys).forEach(function (k) { if (S.keys[k]) out[k] = S.keys[k]; });
+      return out;
+    }
+    async function vaultSave() {
+      if (!window.crypto || !crypto.subtle) throw new Error("no webcrypto");
+      const keys = savedKeys();
+      if (!Object.keys(keys).length) return false;
+      let ck = null;
+      try { const old = await idbDo("readonly", function (st) { return st.get(VAULT); }); ck = old && old.ck; } catch (_) {}
+      if (!ck) ck = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const plain = new TextEncoder().encode(JSON.stringify({ keys: keys, provider: S.provider, model: S.model }));
+      const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, ck, plain);
+      await idbDo("readwrite", function (st) { return st.put({ ck: ck, iv: iv, ct: ct }, VAULT); });
+      return true;
+    }
+    async function vaultLoad() {
+      try {
+        if (!window.crypto || !crypto.subtle) return;
+        const v = await idbDo("readonly", function (st) { return st.get(VAULT); });
+        if (!v || !v.ck) return;
+        const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: v.iv }, v.ck, v.ct);
+        const data = JSON.parse(new TextDecoder().decode(plain));
+        Object.keys(data.keys || {}).forEach(function (k) { if (PROVIDERS[k] && !S.keys[k]) S.keys[k] = data.keys[k]; });
+        if (data.provider && PROVIDERS[data.provider] && S.keys[data.provider]) {
+          S.provider = data.provider;
+          if (data.model) S.model = data.model;
+        }
+        $("chkRememberKey").checked = true;
+        renderProviders(); renderReady(); refreshStatus();
+        setTimeout(warmUp, 50);
+      } catch (_) { /* nothing saved, or storage unavailable */ }
+    }
+    function vaultClear() { return idbDo("readwrite", function (st) { return st.delete(VAULT); }); }
+    $("chkRememberKey").addEventListener("change", function () {
+      if (this.checked) {
+        vaultSave().then(function (ok) {
+          toast(ok ? "已加密保存在这个浏览器里，下次打开不用再粘贴。" : "保存 Key 后会自动记住。");
+        }).catch(function () { $("chkRememberKey").checked = false; toast("这个浏览器不能加密保存 Key。"); });
+      } else {
+        vaultClear().then(function () { toast("已从这个浏览器删除保存的 Key。"); }).catch(function () {});
+      }
+    });
+
+    // ---- Early drafts: start answering while the other side is still finishing the question ----
+    const SPEC = { timer: null };
+    function normQ(t) { return (t || "").toLowerCase().replace(/[\s.,!?;:，。！？；：、"'“”‘’…-]+/g, ""); }
+    function sameQuestion(a, b) {
+      const x = normQ(a), y = normQ(b);
+      if (!x || !y) return false;
+      if (x === y) return true;
+      const ratio = Math.min(x.length, y.length) / Math.max(x.length, y.length);
+      return ratio >= 0.8 && bigramSim(x, y) >= 0.8;
+    }
+    function confirmSpec(a, q) {
+      a.spec = false;
+      a.finalAt = Date.now();
+      if (a.refs && a.refs.card) a.refs.card.classList.remove("spec");
+      updateAnswer(a);
+      a.question = q;
+      S.lastAutoQ = q;
+      if (a.refs && a.refs.card) {
+        const tag = a.refs.card.querySelector(".q-tag");
+        const txt = a.refs.card.querySelector(".q-text");
+        if (tag) tag.textContent = "对方问";
+        if (txt) txt.textContent = q;
+      }
+    }
+    function maybeSpeculate(ch, mid) {
+      if (SPEC.timer) { clearTimeout(SPEC.timer); SPEC.timer = null; }
+      if (ch === "mic" || (ch === "room" && S.spk) || S.autoMode === "off" || !S.listening || !$("chkSpec").checked || !aiReady()) return;
+      const heard = (mid || "").trim();
+      if (heard.length < 6) return;
+      SPEC.timer = setTimeout(function () {
+        SPEC.timer = null;
+        if ((S.liveInterim[ch] || "").trim() !== heard) return;   // they're still talking
+        if (!looksLikeQuestion(heard)) return;
+        const last = S.utts[S.utts.length - 1];
+        const q = ((last && last.ch !== "mic" ? latestTheirTurn() + " " : "") + heard).trim();
+        const cur = S.current;
+        if (cur && cur.status === "streaming" && cur.kind !== "answer") return;
+        if (cur && cur.auto && sameQuestion(q, cur.question)) return;   // already on it
+        answer(q, { auto: true, spec: true });
+      }, 300);
+    }
+
+    // ---- Follow-up recap: summary, their questions, commitments, and an email draft ----
+    function recapEmail(text) {
+      const i = (text || "").indexOf("【跟进邮件】");
+      return i === -1 ? "" : text.slice(i + "【跟进邮件】".length).trim();
+    }
+    function recap(auto) {
+      if (S.utts.length < 2) { toast("对话太少，还没法生成跟进。"); return; }
+      if (!aiReady()) { toast("生成跟进需要先设置 AI 模型。"); openDrawer("model"); return; }
+      const transcript = S.utts.slice(-120).map(function (u) { return whoLabel(u.ch) + "：" + u.text; }).join("\n");
+      const bg = $("bgInput").value.trim();
+      const langRule = $("langSel").value === "en"
+        ? "Write everything in English, but keep the 【】 section headers exactly as given."
+        : "用对话的主要语言写内容（中文对话用中文，英文对话用英文），但 【】 小标题保持原样。";
+      answer("通话跟进", {
+        kind: "recap",
+        displayQuestion: auto ? "这场对话的跟进（停止收音后自动生成）" : "这场对话的跟进",
+        system: "你是我的助理，根据刚才的对话记录整理会后跟进。只写对话里真实出现的内容，不要编造数字、日期或承诺。" + langRule +
+          "\n严格使用以下格式：\n【一句话总结】\n…\n\n【对方关心的问题】\n• …\n\n【约定的事项】\n• 谁 · 做什么 · 什么时候（没说时间就写「待定」）\n\n【跟进邮件】\n主题：…\n\n正文：简短、礼貌、可以直接发送；先感谢，再回顾要点，列出下一步，最后一句收尾。",
+        user: (bg ? "【背景】\n" + bg + "\n\n" : "") + "【对话记录】\n" + transcript,
+        onDone: function () { saveSessionLocal(); if (auto) toast("跟进已生成并存进「记录」，可以直接复制邮件。", 5000); }
+      });
+    }
+
+
+    // ---- Meeting audio (tab / screen share). Only ever asked for when the user chooses it. ----
+    async function connectMeetingAudio(only) {
+      try {
+        const ds = await navigator.mediaDevices.getDisplayMedia({
+          video: { displaySurface: "browser" },
+          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, suppressLocalAudioPlayback: false },
+          preferCurrentTab: false,
+          selfBrowserSurface: "exclude",
+          surfaceSwitching: "include",
+          systemAudio: "include",
+          monitorTypeSurfaces: "include"
+        });
+        const audio = ds.getAudioTracks();
+        ds.getVideoTracks().forEach(function (t) { t.stop(); });   // only the sound is used
+        if (!audio.length) {
+          toast(S.uiLang === "en" ? "No sound was shared. Pick the meeting tab and turn on “Share tab audio”." : "没有收到声音：请选会议所在的标签页，并打开「分享标签页音频」。", 7000);
+          return false;
+        }
+        const spkStream = new MediaStream(audio);
+        const spkEnded = function () { S.spk = null; refreshStatus(); if (!S.mic && S.listening) stopListening(); };
+        const spkSegments = function (st) {
+          return createCapture(st, $("meterSpk"), function (wav) { onSegment("spk", wav); }, spkEnded);
+        };
+        if (liveSttUsable()) {
+          S.spk = createLiveTranscriber("spk", spkStream, $("meterSpk"), spkEnded, function (st) { S.spk = spkSegments(st); });
+        } else {
+          S.spk = spkSegments(spkStream);
+          if (sttRoute() === "browser" && trackRecognitionUsable()) startTrackRecognition("spk", audio[0]);
+        }
+        refreshStatus();
+        return true;
+      } catch (_) {
+        if (!only) toast(S.uiLang === "en" ? "Meeting audio not added. Cue keeps using the microphone." : "没有添加会议声音，继续只用麦克风。");
+        return false;
+      }
+    }
+
+    function openTabDialog() {
+      const d = $("tabDialog");
+      if (typeof d.showModal === "function") d.showModal(); else d.setAttribute("open", "");
+    }
+    $("btnAddTab").addEventListener("click", openTabDialog);
+    $("btnTabCancel").addEventListener("click", function () { $("tabDialog").close(); });
+    $("btnTabGo").addEventListener("click", async function () {
+      $("tabDialog").close();
+      if (!S.listening) { S.source = "online"; renderReady(); persistKb(); startListening(); return; }
+      if (await connectMeetingAudio(false)) {
+        toast(S.uiLang === "en" ? "Meeting audio connected. Cue now tells you and them apart." : "已接入会议声音，现在能分清你和对方了。");
+      }
+    });
+
+    // Paste the key right on the start screen.
+    $("btnReadyKey").addEventListener("click", function () {
+      const v = $("readyKey").value.trim();
+      if (!v) { $("readyKey").focus(); return; }
+      $("keyInput").value = v;
+      $("readyKey").value = "";
+      saveKey();
+    });
+    $("readyKey").addEventListener("keydown", function (e) { if (e.key === "Enter") $("btnReadyKey").click(); });
+
+    // Close the "More" menu after picking an item or clicking elsewhere.
+    document.addEventListener("click", function (ev) {
+      const m = $("moreMenu");
+      if (m.open && (!m.contains(ev.target) || ev.target.closest(".menu-pop .btn"))) m.open = false;
+    });
 
     // =====================================================================
     // 15c. Interface language (中文 / English)
@@ -3954,6 +4260,48 @@
       ["正在评估…", "Evaluating…"], ["评估失败：", "Evaluation failed: "], ["得分 ", "Score "], ["已评估", "Evaluated"],
       ["这个浏览器不支持语音识别：请在设置里填 Gemini Key，或直接打字。", "This browser has no speech recognition: add a Gemini key in Settings, or type."],
       ["练习 · ", "Practice · "],
+      ["对方一提问，你就有一句能直接说的回答", "The moment they ask, you have a line you can say"],
+      ["Cue 边听边提示：先答什么、下一点说什么、哪里说错了，全部基于你自己的资料。", "Cue listens and prompts you live: what to say first, what to cover next, and what to correct, all from your own materials."],
+      ["开始收音", "Start listening"],
+      ["只用麦克风，不会共享屏幕。戴耳机开线上会议时，开始后点顶部的「＋ 会议声音」，让 Cue 也听到对方。", "Uses only your microphone, no screen sharing. On a call with headphones, tap “+ Meeting audio” at the top after starting so Cue can hear them too."],
+      ["AI Key", "AI key"], ["粘贴一个 API Key，自动识别是哪家服务", "Paste an API key; Cue detects the provider"],
+      ["粘贴 Gemini / 硅基流动 / DeepSeek / 智谱 / 通义 Key", "Paste a Gemini / SiliconFlow / DeepSeek / Zhipu / Qwen key"],
+      ["声音", "Audio"], ["会议声音", "Meeting audio"], ["更多", "More"], ["导出 Markdown", "Export Markdown"],
+      ["把会议标签页的声音也给 Cue，分清谁在说话（只取声音，不看画面）", "Give Cue the meeting tab's sound so it can tell who's talking (audio only, no video)"],
+      ["点「开始收音」后，大家说的话会实时出现在这里。", "After you tap Start listening, what everyone says appears here in real time."],
+      ["只用麦克风（推荐）", "Microphone only (recommended)"],
+      ["点开始直接听，不用共享任何东西。面对面、电脑外放、手机都可以。", "Starts right away with nothing to share. Works in person, with speakers, and on phones."],
+      ["麦克风 + 会议声音", "Microphone + meeting audio"],
+      ["戴耳机开线上会议时用。开始时浏览器会弹出共享窗口：选会议所在的标签页，并打开「分享标签页音频」。Cue 只取声音，不看画面。", "For calls with headphones. The browser asks what to share: pick the meeting tab and turn on “Share tab audio”. Cue keeps the sound only, never the picture."],
+      ["麦克风 + 会议声音 · 开始时选择会议标签页", "Microphone + meeting audio · pick the meeting tab when starting"],
+      ["只用麦克风 · 不需要共享屏幕", "Microphone only · no screen sharing"],
+      ["让 Cue 也听到对方", "Let Cue hear the other side"],
+      ["戴耳机开会时，麦克风听不到对方。把会议标签页的声音交给 Cue，就能分清谁在说话、更快回答。", "With headphones on, your mic can't hear them. Share the meeting tab's sound so Cue can tell who is talking and answer faster."],
+      ["接下来浏览器会弹出「共享」窗口，这是浏览器的固定流程", "Your browser will show its standard “Share” window next"],
+      ["选上方的「Chrome 标签页」，点开会议所在的标签页（Meet / Zoom 网页版 / Teams）", "Choose “Chrome tab” at the top and pick the meeting tab (Meet / Zoom web / Teams)"],
+      ["确认打开「同时分享标签页音频」，再点「共享」", "Make sure “Also share tab audio” is on, then click Share"],
+      ["Cue 只取声音，画面会立即丢弃，也不会录制或上传视频。用桌面版 Zoom / 腾讯会议时，请选「整个屏幕」并打开「分享系统音频」（仅 Windows / ChromeOS 支持）。", "Cue keeps only the sound; the picture is dropped immediately and never recorded or uploaded. For desktop Zoom / Tencent Meeting, choose “Entire screen” and turn on “Share system audio” (Windows / ChromeOS only)."],
+      ["先不用", "Not now"], ["继续", "Continue"],
+      ["只用麦克风，不会共享屏幕。把手机放在你和对方之间，双方的话都能听到。", "Uses only the microphone, no screen sharing. Put the phone between you and the other person so it hears both."],
+      ["开始听了。对方一提问就会自动出回答。", "Listening. Answers appear as soon as they ask."],
+      ["开始听了。戴耳机开线上会议的话，点顶部「＋ 会议声音」让 Cue 听到对方。", "Listening. On a call with headphones, tap “+ Meeting audio” at the top so Cue can hear them."],
+      ["在这个浏览器记住 Key（加密保存，取消勾选即删除）", "Remember the key in this browser (encrypted; uncheck to delete)"],
+      ["提前起草回答", "Draft answers early"],
+      ["对方还没说完，Cue 就根据已经听到的内容开始起草；说完后意思没变就直接用，回答更快出现。", "Cue starts drafting from what it has heard before they finish; if the question doesn't change, the draft is kept, so answers appear sooner."],
+      ["结束后自动生成跟进", "Auto follow-up when you stop"],
+      ["停止收音后，生成摘要、对方关心的问题、约定的事项和一封跟进邮件，并存进记录。", "After you stop, Cue writes a summary, their questions, commitments, and a follow-up email, and saves it to History."],
+      ["跟进", "Follow-up"], ["生成摘要、约定的事项和跟进邮件", "Summary, commitments and a follow-up email"],
+      ["复制邮件", "Copy email"], ["预判中", "Predicting"], ["网络波动，正在重连…", "Reconnecting…"],
+      ["这场对话的跟进", "Follow-up for this conversation"], ["这场对话的跟进（停止收音后自动生成）", "Follow-up for this conversation (auto-generated)"],
+      ["跟进已生成并存进「记录」，可以直接复制邮件。", "Follow-up is ready and saved to History. You can copy the email."],
+      ["对话太少，还没法生成跟进。", "Not enough conversation for a follow-up yet."],
+      ["生成跟进需要先设置 AI 模型。", "Set up an AI model to generate a follow-up."],
+      ["已停止。点「跟进」生成摘要和跟进邮件，点「复盘」看看哪里可以答得更好。", "Stopped. Tap Follow-up for a summary and email, or Review to see what could be better."],
+      ["已加密保存在这个浏览器里，下次打开不用再粘贴。", "Saved (encrypted) in this browser. No need to paste it next time."],
+      ["保存 Key 后会自动记住。", "The key will be remembered once you save it."],
+      ["这个浏览器不能加密保存 Key。", "This browser can't store the key securely."],
+      ["已从这个浏览器删除保存的 Key。", "The saved key was deleted from this browser."],
+      ["已清除这个浏览器里保存的资料、设置和 Key（当前页面里的内容不受影响）。", "Cleared saved materials, settings and key from this browser (this page is unaffected)."],
       ["粘贴任意 API Key，自动识别是哪家服务", "Paste any API key; the service is detected automatically"],
       ["支持 Gemini、硅基流动、DeepSeek、智谱、通义千问，粘贴后自动识别。", "Works with Gemini, SiliconFlow, DeepSeek, Zhipu and Qwen; detected automatically."],
       ["AI 服务", "AI service"], ["（自动识别，也可以手动选）", "(detected automatically, or pick one)"],
@@ -4143,6 +4491,7 @@
     // 16. Boot
     // =====================================================================
     applyDeviceLimits();
+    if (!CAN_SHARE_AUDIO) $("heroNoteText").textContent = "只用麦克风，不会共享屏幕。把手机放在你和对方之间，双方的话都能听到。";
     showView("live");
     setPane("stage");
     if (window.indexedDB) $("btnForgetLocal").hidden = false;
@@ -4153,6 +4502,7 @@
     initUiLang();
     refreshMicDevices();
     probe();
+    vaultLoad();
     setInterval(probe, 8000);
     if (/[?&]demo=1/.test(window.location.search)) setTimeout(runDemo, 300);
   })();
