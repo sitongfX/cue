@@ -15,6 +15,8 @@ It's a single web page: no server, no build step. Everything runs in your browse
 ## Features
 
 - **Microphone first, no screen-share prompt**: *Start listening* uses only the microphone. On a call with headphones, tap **+ Meeting audio** at any time to add the meeting tab's sound (Chrome on desktop); Cue keeps the audio and drops the picture. On phones, the microphone hears everyone in the room.
+- **Conversation context**: *Prep* has fields for who you're talking to, what it's about and what you want out of it; they go into every answer, follow-up, recap and speaker-labelling prompt.
+- **English-first prompts**: all prompts are written in English (models follow English instructions best), with a spoken-English style (short sentences, contractions, no filler). The answer language follows the conversation by default, so English questions get English answers and Chinese questions get Chinese answers.
 - **Full answers, not just bullets**: each answer has a one-line reply to say first, a complete spoken paragraph you can read out, then the key facts as points (Brief / Standard / Detailed / Cue-card in Settings).
 - **Practise what you were actually asked**: after a call, one tap turns the other side's questions into a practice set (read aloud, answer by voice, get scored).
 - **Searchable history**: search past conversations, including complete transcripts; titles come from the follow-up summary.

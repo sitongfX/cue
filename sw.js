@@ -1,6 +1,6 @@
 // Makes Cue installable and keeps the app shell available offline.
 // Never caches API calls (Gemini etc.) or any user data.
-const CACHE = "cue-shell-v13";
+const CACHE = "cue-shell-v14";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg"];
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

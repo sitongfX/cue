@@ -709,8 +709,21 @@
               </select>
             </div>
             <div class="field">
-              <span class="label">补充背景</span>
-              <textarea class="textarea" id="bgInput" style="min-height: 90px;" placeholder="例如：今天和 XX 客户讨论续约；对方是采购负责人；希望语气专业简洁。"></textarea>
+              <span class="label">对方是谁</span>
+              <input class="input" id="ctxWho" type="text" placeholder="例如：Sarah，Acme 公司采购负责人；关心价格和上线时间" />
+            </div>
+            <div class="field">
+              <span class="label">这次聊什么</span>
+              <input class="input" id="ctxTopic" type="text" placeholder="例如：年度续约，讨论报价和服务范围" />
+            </div>
+            <div class="field">
+              <span class="label">我想达成什么</span>
+              <input class="input" id="ctxGoal" type="text" placeholder="例如：拿到续约意向，守住年付八五折的底线" />
+            </div>
+            <div class="field">
+              <span class="label">关于我 / 其他背景</span>
+              <textarea class="textarea" id="bgInput" style="min-height: 80px;" placeholder="例如：我是 Cue 的产品负责人；语气专业、简洁；不要承诺具体上线日期。"></textarea>
+              <span class="help">这些会放进每一次回答的提示里，回答会更贴合这场对话。每次开会前改一下就好。</span>
             </div>
           </div>
 
@@ -992,6 +1005,7 @@
         <div class="field">
           <span class="label">回答语言</span>
           <select class="select" id="langSel">
+            <option value="auto" selected>跟随对话的语言（对方说英文就用英文回答）</option>
             <option value="zh">中文</option>
             <option value="en">English</option>
             <option value="bilingual">英文回答 + 中文提示</option>
@@ -1470,8 +1484,8 @@
     function currentSettings() {
       return {
         provider: S.provider, model: S.model, source: S.source, srcV: "2", autoMode: S.autoMode,
-        scenario: $("scenarioSel").value, lang: $("langSel").value, length: $("lengthSel").value,
-        background: $("bgInput").value, strictKb: S.strictKb ? "1" : "0", micDevice: S.micDevice,
+        scenario: $("scenarioSel").value, lang: $("langSel").value, langV: "2", length: $("lengthSel").value,
+        background: $("bgInput").value, ctxWho: $("ctxWho").value, ctxTopic: $("ctxTopic").value, ctxGoal: $("ctxGoal").value, strictKb: S.strictKb ? "1" : "0", micDevice: S.micDevice,
         uiLang: S.uiLang, spokenLang: $("spokenLang").value, fastMic: $("chkFastMic").checked ? "1" : "0",
         translate: $("translateSel").value, liveStt: $("chkLiveStt").checked ? "1" : "0", coach: $("chkCoach").checked ? "1" : "0",
         spec: $("chkSpec").checked ? "1" : "0", recap: $("chkRecap").checked ? "1" : "0", semantic: $("chkSemantic").checked ? "1" : "0",
@@ -1505,9 +1519,11 @@
       if (st.protect) { $("chkProtect").checked = st.protect === "1"; applyProtect(); }
       if (typeof st.voiceMe === "string") { S.voiceMe = parseFloat(st.voiceMe) || 0; voiceStateUi(); }
       if (st.uiLang && st.uiLang !== S.uiLang) setUiLang(st.uiLang, true);
-      if (st.lang) $("langSel").value = st.lang;
+      // v2: "follow the conversation" became the default answer language
+      if (st.lang) $("langSel").value = (st.langV === "2" || st.lang !== "zh") ? st.lang : "auto";
       if (st.length) $("lengthSel").value = st.length;
       if (typeof st.background === "string") $("bgInput").value = st.background;
+      ["ctxWho", "ctxTopic", "ctxGoal"].forEach(function (k) { if (typeof st[k] === "string") $(k).value = st[k]; });
       if (st.strictKb) { S.strictKb = st.strictKb === "1"; $("chkStrict").checked = S.strictKb; }
       if (typeof st.micDevice === "string") S.micDevice = st.micDevice;
       renderProviders();
@@ -2547,61 +2563,87 @@
     // 9. Prompting
     // =====================================================================
     const SCENARIO_PROMPTS = {
-      meeting: "你是我在会议中的实时发言助手。",
-      presentation: "我刚做完一场分享，现在是问答环节，你帮我实时作答。回答要直接回应提问，先给结论，再给一个具体的数字或例子。",
-      support: "你是我在客服 / 答疑中的实时助手。先确认对方的问题，再给出清楚、可执行的步骤；不确定的地方说明会跟进。",
-      sales: "你是我在商务沟通和谈判中的实时助手。先认可对方的关切，再守住我方的核心价值，最后给出双赢的方案。",
-      tech: "你是资深工程师，在技术评审或答辩中帮我作答，强调取舍、关键指标和边界情况。"
+      meeting: "You are my real-time speaking assistant in a meeting. When someone asks me something, you tell me exactly what to say.",
+      presentation: "I just gave a talk and this is the Q&A. Help me answer live: lead with the answer, then one concrete number or example.",
+      support: "You help me answer in a support / office-hours conversation: confirm the problem, then give clear, actionable steps; if something is uncertain, say I'll follow up.",
+      sales: "You help me in a client / sales conversation: acknowledge their concern, hold on to our core value, and steer toward a win-win next step.",
+      tech: "You are a senior engineer helping me answer in a technical review: focus on trade-offs, key metrics and edge cases."
     };
 
-    function systemText() {
-      const lang = $("langSel").value;
+    // Output language: "auto" follows the language of the question (or of the conversation).
+    function outLang(sample) {
+      const v = $("langSel").value;
+      if (v !== "auto") return v;
+      return CJK_RE.test(sample || "") ? "zh" : "en";
+    }
+    function convoSample() { return S.utts.slice(-12).map(function (u) { return u.text; }).join(" "); }
+    function convoLang() {
+      const v = $("langSel").value;
+      if (v !== "auto") return v === "bilingual" ? "en" : v;
+      const t = convoSample();
+      const zh = (t.match(/[\u4e00-\u9fff]/g) || []).length, en = (t.match(/[a-z]+/gi) || []).length;
+      return zh > en ? "zh" : "en";
+    }
+    function langName(l) { return l === "zh" ? "Simplified Chinese" : "English"; }
+    const SPOKEN_EN = "Sound like a confident professional talking, not writing: short sentences, contractions (we're, it's, that's), plain everyday words. " +
+      "No filler like \"Great question\", no hedging, no corporate jargon unless they used it first.";
+    const SPOKEN_ZH = "像真人当面说话：短句、口语、直接，不要书面腔和套话。";
+    function whoEn(ch) { return ch === "mic" ? "Me" : (ch === "spk" ? "Them" : "Unlabelled"); }
+    // Who I'm talking to, about what, and what I want: added to every prompt.
+    function ctxBlock() {
+      const who = $("ctxWho").value.trim(), topic = $("ctxTopic").value.trim(), goal = $("ctxGoal").value.trim();
+      const bg = $("bgInput").value.trim();
+      const lines = [];
+      if (who) lines.push("Other side: " + who.slice(0, 300));
+      if (topic) lines.push("Topic: " + topic.slice(0, 300));
+      if (goal) lines.push("My goal: " + goal.slice(0, 300));
+      let out = lines.length ? "[This conversation]\n" + lines.join("\n") : "";
+      if (bg) out += (out ? "\n\n" : "") + "[About me]\n" + bg.slice(0, 2000);
+      return out;
+    }
+
+    function systemText(q) {
+      const lang = outLang(q || "");
       const len = $("lengthSel").value;
       const scen = SCENARIO_PROMPTS[$("scenarioSel").value] || SCENARIO_PROMPTS.meeting;
       const nPoints = len === "brief" ? "2" : (len === "detailed" ? "4-5" : "3");
       const para = len === "brief" ? "" : (len === "detailed" ? "5-7" : "3-5");
+      const lim = lang === "zh" ? function (w, c) { return "max " + c + " Chinese characters"; } : function (w) { return "max " + w + " words"; };
       let fmt;
       if (len === "cue") {
-        fmt = lang === "zh"
-          ? "用中文。格式严格如下：\n第1行：一句很短的开场白，我可以直接说出口（不超过20字，不要前缀）。\n然后 3-5 行关键词提示，每行以「• 」开头，每行不超过10个字，只写关键词、数字或要点名，不写完整句子。\n不要寒暄、标题或加粗。"
-          : "Format strictly:\nLine 1: a very short opener I can say out loud (max 12 words, no prefix).\nThen 3-5 cue lines, each starting with \"• \", max 4 words each: keywords and numbers only, no full sentences.\nNo greetings, headings or bold.";
-      } else if (lang === "en") {
-        fmt = "Reply in English. Format strictly:\nLine 1: one natural first-person sentence that directly answers, which I can say out loud right now (max 25 words, no prefix).\n" +
-          (para ? "Line 2: start with \"» \" and write a complete spoken answer of " + para + " sentences in first person that continues from line 1 without repeating it, natural and specific (facts, numbers, how, why" + (len === "detailed" ? ", plus one concrete example" : "") + "), ready to read out.\n" : "") +
-          "Then " + nPoints + " lines, each starting with \"• \": the key facts or numbers to remember, short and concrete." +
-          "\nNo greetings, no headings, no markdown bold.";
+        fmt = "Format strictly:\nLine 1: a very short opener I can say out loud (" + lim(12, 20) + ", no prefix).\n" +
+          "Then 3-5 cue lines, each starting with \"• \", " + lim(4, 10) + " each: keywords and numbers only, no full sentences.";
       } else if (lang === "bilingual") {
-        fmt = "格式严格如下：\n第1行：一句我可以直接说出口的自然英文口语回答（不超过25个词，不要前缀）。\n" +
-          (para ? "第2行：以「» 」开头，一段 " + para + " 句完整的英文口语回答，可以直接照着说，具体、有细节。\n" : "") +
-          "然后以「• 中文：」开头的一行，给出完整回答的中文意思。\n" +
-          "然后 " + nPoints + " 行英文要点，每行以「• 」开头，后面括号附简短中文。\n不要寒暄、标题或加粗。";
+        fmt = "Format strictly:\nLine 1: one natural spoken English sentence that directly answers (max 25 words, no prefix).\n" +
+          (para ? "Line 2: start with \"» \" and write a complete spoken English answer of " + para + " sentences that continues from line 1 without repeating it, specific and ready to read out.\n" : "") +
+          "Then one line starting with \"• 中文：\" giving the Chinese meaning of the full answer.\n" +
+          "Then " + nPoints + " lines starting with \"• \": key points in English, each followed by a short Chinese gloss in parentheses.";
       } else {
-        fmt = "用中文回答。格式严格如下：\n第1行：一句直接回答问题、我可以马上说出口的第一人称口语（不超过40字，像真人说话，不要任何前缀或套话）。\n" +
-          (para ? "第2行：以「» 」开头，写一段 " + para + " 句的完整口语回答，接着第1行往下说、不要重复第1行，第一人称，可以直接照着说，要有具体事实、数字、做法或原因" + (len === "detailed" ? "，并带一个具体例子" : "") + "。\n" : "") +
-          "然后 " + nPoints + " 行要点，每行以「• 」开头，每条不超过30字：需要记住的关键事实或数字。" +
-          "\n不要寒暄、标题或 Markdown 加粗。";
+        fmt = "Format strictly:\nLine 1: one first-person sentence that directly answers the question and that I can say out loud right now (" + lim(25, 40) + ", no prefix).\n" +
+          (para ? "Line 2: start with \"» \" and write a complete spoken answer of " + para + " sentences that continues from line 1 without repeating it: first person, specific facts, numbers, how and why" + (len === "detailed" ? ", plus one concrete example" : "") + ". Ready to read out.\n" : "") +
+          "Then " + nPoints + " lines starting with \"• \": the key facts or numbers to remember (" + lim(12, 30) + " each).";
       }
+      fmt += "\nNo greetings, no headings, no markdown bold.\nWrite in " + (lang === "bilingual" ? "the languages above" : langName(lang)) + ". " +
+        (lang === "zh" ? SPOKEN_ZH : SPOKEN_EN);
       let strict = "";
       if (S.strictKb && S.docs.length) {
-        strict = lang === "en"
-          ? "\nIf [My materials] contain relevant facts, use them exactly; never invent numbers or experiences that are not there."
-          : "\n如果【我的资料】里有相关内容，必须使用其中的事实和数字；资料里没有的经历和数字不要编造。";
+        strict = "\nIf [My materials] contain relevant facts, use them exactly. Never invent numbers, names, dates or experiences that aren't there; if the materials don't cover it, answer honestly in general terms.";
       }
-      return scen + "\n" + fmt + strict + styleHints(lang);
+      return scen + "\n" + fmt + strict + styleHints(lang === "zh" ? "zh" : "en");
     }
 
     function userText(question, hits, extra) {
       const parts = [];
-      const bg = $("bgInput").value.trim();
-      if (bg) parts.push("【背景】\n" + bg.slice(0, 2000));
+      const ctx = ctxBlock();
+      if (ctx) parts.push(ctx);
       if (hits.length) {
-        parts.push("【📄 知识库匹配段落】（我的资料）\n" + hits.map(function (h, i) {
-          return "[" + (i + 1) + "] 《" + h.doc + "》\n" + h.text;
+        parts.push("[My materials — matching passages]\n" + hits.map(function (h, i) {
+          return "[" + (i + 1) + "] (" + h.doc + ")\n" + h.text;
         }).join("\n\n"));
       }
-      const recent = S.utts.slice(-8).map(function (u) { return whoLabel(u.ch) + "：" + u.text; }).join("\n");
-      if (recent) parts.push("【最近对话】\n" + recent);
-      parts.push("【需要立即回答的目标内容】\n" + question);
+      const recent = S.utts.slice(-8).map(function (u) { return whoEn(u.ch) + ": " + u.text; }).join("\n");
+      if (recent) parts.push("[Recent conversation]\n" + recent);
+      parts.push("[Answer this now]\n" + question);
       if (extra) parts.push(extra);
       return parts.join("\n\n");
     }
@@ -2734,10 +2776,10 @@
     // 11. Answers
     // =====================================================================
     const FOLLOWUPS = [
-      { label: "展开", key: "1", instruction: "在上一版回答的基础上展开更多细节和具体做法，保持同样的输出格式。" },
-      { label: "举个例子", key: "2", instruction: "给一个具体、可以直接说出口的真实例子，保持同样的输出格式。" },
-      { label: "更简短", key: "3", instruction: "把回答压缩成一句最核心、最自然的话（不超过30字），不要要点。" },
-      { label: "换成英文", key: "4", instruction: "把回答改写成自然地道的英文口语：第1行英文口语句，之后要点用英文并在括号里附简短中文。" }
+      { label: "展开", key: "1", instruction: "Expand on the previous answer with more detail and concrete steps. Keep the same format." },
+      { label: "举个例子", key: "2", instruction: "Give one concrete, real example I can say out loud. Keep the same format." },
+      { label: "更简短", key: "3", instruction: "Compress the answer into one natural sentence (max 25 words, or 30 Chinese characters). No bullet points." },
+      { label: "换成英文", key: "4", instruction: "Rewrite the answer in natural spoken English: line 1 in English, the » paragraph in English, then the bullet points in English with a short Chinese gloss in parentheses." }
     ];
 
     // If the best knowledge-base hit is a prepared "Q: … A: …" pair, show its answer instantly.
@@ -3051,9 +3093,9 @@
       if (a.kind === "answer" && !opts.presetHits && !opts.base) refineHits(a, q, opts);
       let extra = opts.extra;
       if (!extra && a.subqs.length >= 2) {
-        extra = ($("langSel").value === "en" ? "They asked " + a.subqs.length + " questions at once: " : "对方一次问了 " + a.subqs.length + " 个问题：") +
+        extra = "They asked " + a.subqs.length + " questions at once: " +
           a.subqs.map(function (x, i) { return (i + 1) + ") " + x; }).join(" ") +
-          ($("langSel").value === "en" ? "\nLine 1 should acknowledge all of them in one sentence; then give at least one point per question, in order." : "\n第1行用一句话同时回应；之后按顺序每个问题至少一个要点。");
+          "\nLine 1 should acknowledge all of them in one sentence; then cover each question, in order.";
       }
       const ctl = new AbortController();
       S.abort = ctl;
@@ -3061,7 +3103,7 @@
       const t0 = performance.now();
       try {
         const runner = a.kind === "answer" && !opts.system ? streamRace : streamAnswer;
-        await runner(opts.system || systemText(), opts.user || userText(q, a.hits, extra), ctl.signal, function (delta) {
+        await runner(opts.system || systemText(q), opts.user || userText(q, a.hits, extra), ctl.signal, function (delta) {
           if (!a.ttft) { a.ttft = performance.now() - t0; a.firstAt = Date.now(); }
           a.text += delta;
           updateAnswer(a);
@@ -3086,7 +3128,7 @@
       answer(base.question, {
         base: base,
         followLabel: f.label,
-        extra: "【上一版回答】\n" + answerPlainText(base) + "\n\n【追问要求】\n" + f.instruction
+        extra: "[Previous answer]\n" + answerPlainText(base) + "\n\n[Follow-up request]\n" + f.instruction
       });
     }
 
@@ -3118,9 +3160,11 @@
       answer("会前演练", {
         kind: "prep",
         displayQuestion: "根据你的资料，对方最可能问的 8 个问题（已存入资料库，现场被问到时会立刻显示）",
-        system: "你是我的会前教练。场景：" + scen + "。根据我的资料和背景，预测对方最可能问的 8 个问题（由浅到深，包含 2 个刁钻问题），并写出我的最佳回答。" +
-          "\n严格使用这个格式，问题之间空一行：\nQ: 问题\nA: 第一人称口语回答，2-3 句，优先引用资料里的事实和数字；资料里没有的不要编造。\n不要输出其他任何内容。",
-        user: (bg ? "【背景】\n" + bg + "\n\n" : "") + "【我的资料】\n" + mats,
+        system: "You are my pre-meeting coach. Scenario: " + scen + ". From my materials and the context, predict the 8 questions the other side is most likely to ask " +
+          "(easy to hard, including 2 tough ones) and write my best answer to each.\nUse exactly this format, blank line between pairs:\nQ: question\n" +
+          "A: first-person spoken answer, 2-3 sentences, using facts and numbers from my materials; never invent any.\nOutput nothing else. Write the questions and answers in " +
+          langName(outLang(mats + " " + $("ctxTopic").value)) + "; keep the \"Q:\" and \"A:\" labels.",
+        user: (ctxBlock() ? ctxBlock() + "\n\n" : "") + "[My materials]\n" + mats,
         onDone: function (a) {
           if (addDoc(PREP_DOC, a.text)) toast("演练结果已存入资料库。现场被问到类似问题时会立刻显示。", 5000);
         }
@@ -3135,7 +3179,7 @@
       answer("会后复盘", {
         kind: "review",
         displayQuestion: "这场对话的复盘",
-        system: (S.uiLang === "en" || $("langSel").value === "en")
+        system: convoLang() === "en"
           ? "You are my communication coach. Review the conversation we just had: look only at what \"Me\" actually said versus the other side's questions, and give concrete, actionable advice. Write in English. Use exactly this format:" +
             "\n[One-line summary]\n…\n\n[What they cared about]\n• …\n\n[What I did well]\n• …\n\n[What could be better]\n• issue → better wording: \"…\"\n\n[Next steps]\n• …\n\n[Save to materials]\nQ: a question they asked\nA: the improved best answer (first person, spoken, 2-3 sentences)\n(one Q/A per key question, blank line between them)"
           : "你是我的沟通教练，帮我复盘刚才的对话。只看「我」实际说了什么，对比对方的问题，给出具体、可执行的建议。严格使用以下格式：" +
@@ -3158,7 +3202,7 @@
 
     function summarize() {
       if (!S.utts.length) { toast("还没有对话内容可以整理。"); return; }
-      const lang = $("langSel").value;
+      const lang = convoLang();
       answer("请整理目前为止的对话", {
         kind: "summary",
         displayQuestion: "目前为止的对话纪要",
@@ -3617,7 +3661,7 @@
     if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
       navigator.mediaDevices.addEventListener("devicechange", refreshMicDevices);
     }
-    ["scenarioSel", "langSel", "lengthSel", "bgInput", "chkStrict", "modelInput", "spokenLang", "chkFastMic", "translateSel", "chkLiveStt", "chkCoach", "chkSpec", "chkRecap", "chkSemantic", "chkMemory", "chkContribute", "chkProtect", "chkRecord", "chkRoles", "chkRace", "chkHint"].forEach(function (id) {
+    ["scenarioSel", "langSel", "lengthSel", "bgInput", "ctxWho", "ctxTopic", "ctxGoal", "chkStrict", "modelInput", "spokenLang", "chkFastMic", "translateSel", "chkLiveStt", "chkCoach", "chkSpec", "chkRecap", "chkSemantic", "chkMemory", "chkContribute", "chkProtect", "chkRecord", "chkRoles", "chkRace", "chkHint"].forEach(function (id) {
       $(id).addEventListener("change", persistKb);
     });
     $("scenarioSel").addEventListener("change", function () {
@@ -3911,6 +3955,12 @@
 
     // ---- Practice: AI asks, you answer by voice or text, AI scores and rewrites ----
     const P = { q: "", asked: [], rec: null, chain: null, abort: null, better: "", queue: [], queueTotal: 0 };
+    const PRAC_TYPES_EN = {
+      common: "the most common, most likely question",
+      deep: "a follow-up that digs into a specific project or experience in my materials",
+      tough: "a tough, high-pressure question that's easy to answer badly",
+      behavior: "a request for a specific example (a difficult customer, a failure, a key decision)"
+    };
     const PRAC_TYPES = {
       common: "最常见、最可能被问到的问题",
       deep: "针对我资料里某个具体项目或经历、追问细节的问题",
@@ -3946,7 +3996,7 @@
       stopPracRecording();
       if (window.speechSynthesis) speechSynthesis.cancel();
       const scen = $("scenarioSel").options[$("scenarioSel").selectedIndex].textContent;
-      const lang = $("langSel").value === "zh" ? "中文" : "English";
+      const lang = langName(outLang(materialsDigest(400) + " " + convoSample()));
       const mats = materialsDigest(5000);
       const bg = $("bgInput").value.trim();
       $("pracAnswer").value = "";
@@ -3973,10 +4023,10 @@
       pracBusy(true);
       try {
         const q = await pracStream(
-          "你在扮演对方（场景：" + scen + "）。出一道" + PRAC_TYPES[$("pracType").value] +
-          "。只输出问题本身，一到两句话，用" + lang + "，不要编号、前缀或解释。不要和已问过的问题重复。",
-          (bg ? "【背景】\n" + bg + "\n\n" : "") + (mats ? "【我的资料】\n" + mats + "\n\n" : "") +
-          (P.asked.length ? "【已问过】\n" + P.asked.slice(-10).join("\n") : "请出第一道题。"),
+          "You play the other side in this scenario: " + scen + ". Ask me one question of this type: " + PRAC_TYPES_EN[$("pracType").value] +
+          ". Output only the question itself, one or two sentences, in " + lang + ". No numbering, prefix or explanation. Don't repeat earlier questions.",
+          (ctxBlock() ? ctxBlock() + "\n\n" : "") + (mats ? "[My materials]\n" + mats + "\n\n" : "") +
+          (P.asked.length ? "[Already asked]\n" + P.asked.slice(-10).join("\n") : "Ask the first question."),
           function (t) { qEl.classList.remove("placeholder"); qEl.textContent = t.trim(); });
         P.q = q.trim().replace(/^["“「]|["”」]$/g, "");
         qEl.textContent = P.q;
@@ -4025,14 +4075,17 @@
       const mats = materialsDigest(3000);
       try {
         const fb = await pracStream(
-          "你是我的沟通教练。评估我对这个问题的回答，具体、直接、可执行。严格使用以下格式：\n评分：x/10\n【答得好的地方】\n• …\n【可以更好的地方】\n• …\n【更好的回答】\n（第一人称口语，可以直接说出口，3-5 句；优先使用我资料里的事实和数字，资料里没有的不要编造）",
-          "【问题】\n" + P.q + "\n\n【我的回答】\n" + ans + (mats ? "\n\n【我的资料】\n" + mats : ""),
+          "You are my communication coach. Assess my answer to this question: specific, direct, actionable. Use exactly this format:\n" +
+          "Score: x/10\n[What worked]\n• …\n[What could be better]\n• …\n[Better answer]\n(first person, spoken, ready to say, 3-5 sentences; use facts and numbers from my materials, never invent any)\n" +
+          "Keep the bracketed headers and \"Score:\" exactly as written; write everything else in " + langName(outLang(P.q)) + ".",
+          "[Question]\n" + P.q + "\n\n[My answer]\n" + ans + (mats ? "\n\n[My materials]\n" + mats : ""),
           function (t) { out.textContent = t; });
         out.classList.remove("caret");
-        const i = fb.indexOf("【更好的回答】");
-        P.better = i >= 0 ? fb.slice(i + "【更好的回答】".length).trim() : "";
+        let mk = "[Better answer]", i = fb.indexOf(mk);
+        if (i < 0) { mk = "【更好的回答】"; i = fb.indexOf(mk); }
+        P.better = i >= 0 ? fb.slice(i + mk.length).trim() : "";
         $("btnPracSave").hidden = !P.better;
-        const m = fb.match(/评分[:：]\s*(\d+(?:\.\d)?)\s*\/\s*10/);
+        const m = fb.match(/(?:Score|评分)\s*[:：]\s*(\d+(?:\.\d)?)\s*\/\s*10/i);
         addPracItem(P.q, m ? m[1] + "/10" : "");
       } catch (e) {
         out.classList.remove("caret");
@@ -4399,7 +4452,7 @@
       if (COACH.abort) { try { COACH.abort.abort(); } catch (_) {} }
       const ctl = new AbortController();
       COACH.abort = ctl;
-      const lang = $("langSel").value === "zh" ? "Chinese" : "English";
+      const lang = langName(convoLang());
       const mats = a.hits.map(function (h) { return h.text; }).join("\n---\n").slice(0, 2500);
       let out = "";
       try {
@@ -4644,7 +4697,7 @@
       if (!aiReady()) { toast("生成跟进需要先设置 AI 模型。"); openDrawer("model"); return; }
       const transcript = S.utts.slice(-120).map(function (u) { return whoLabel(u.ch) + "：" + u.text; }).join("\n");
       const bg = $("bgInput").value.trim();
-      const enRecap = S.uiLang === "en" || $("langSel").value === "en";
+      const enRecap = convoLang() === "en";
       const langRule = enRecap
         ? "Write everything in English."
         : "用对话的主要语言写内容（中文对话用中文，英文对话用英文），但 【】 小标题保持原样。";
@@ -4655,7 +4708,7 @@
           (enRecap
             ? "\nUse exactly this format:\n[One-line summary]\n…\n\n[Their questions]\n• …\n\n[Commitments]\n• who · what · when (write \"TBD\" if no time was said)\n\n[Follow-up email]\nSubject: …\n\nBody: short, polite, ready to send; thank them, recap the key points, list next steps, close in one line."
             : "\n严格使用以下格式：\n【一句话总结】\n…\n\n【对方关心的问题】\n• …\n\n【约定的事项】\n• 谁 · 做什么 · 什么时候（没说时间就写「待定」）\n\n【跟进邮件】\n主题：…\n\n正文：简短、礼貌、可以直接发送；先感谢，再回顾要点，列出下一步，最后一句收尾。"),
-        user: (bg ? "【背景】\n" + bg + "\n\n" : "") + "【对话记录】\n" + transcript,
+        user: (ctxBlock() ? ctxBlock() + "\n\n" : "") + (enRecap ? "[Transcript]\n" : "【对话记录】\n") + transcript,
         onDone: function (a) {
           const m = (a.text || "").match(/(?:【一句话总结】|\[One-line summary\])\s*\n?\s*([^\n]+)/);
           if (m) S.sessTitle = m[1].trim();
@@ -5487,7 +5540,8 @@
           "using their own materials (described below). OTHER is anyone else. All lines came from one microphone, so speakers are mixed. " +
           "Use content and flow: questions put to ME, answers stating ME's facts, how turns alternate. " +
           "Reply with JSON only: {\"labels\": [\"ME\" or \"OTHER\", ...]} with exactly one label per numbered line, in order.",
-          "[About ME]\n" + (bg || "(no background)") + (docs ? "\nME's materials: " + docs : "") + "\n\n[Transcript]\n" + lines,
+          "[About ME]\n" + (bg || "(no background)") + (docs ? "\nME's materials: " + docs : "") +
+          ($("ctxWho").value.trim() ? "\n[The other side]\n" + $("ctxWho").value.trim().slice(0, 300) : "") + "\n\n[Transcript]\n" + lines,
           new AbortController().signal, function (d) { out += d; });
         const m = out.match(/\{[\s\S]*\}/);
         const labels = m ? (JSON.parse(m[0]).labels || []) : [];
@@ -6038,6 +6092,14 @@
       ["正在评估…", "Evaluating…"], ["评估失败：", "Evaluation failed: "], ["得分 ", "Score "], ["已评估", "Evaluated"],
       ["这个浏览器不支持语音识别：请在设置里填 Gemini Key，或直接打字。", "This browser has no speech recognition: add a Gemini key in Settings, or type."],
       ["练习 · ", "Practice · "],
+      ["跟随对话的语言（对方说英文就用英文回答）", "Follow the conversation (answer in English when they speak English)"],
+      ["对方是谁", "Who you're talking to"], ["这次聊什么", "What it's about"], ["我想达成什么", "What you want out of it"],
+      ["关于我 / 其他背景", "About me / other context"],
+      ["例如：Sarah，Acme 公司采购负责人；关心价格和上线时间", "e.g. Sarah, head of procurement at Acme; cares about price and go-live date"],
+      ["例如：年度续约，讨论报价和服务范围", "e.g. Annual renewal: pricing and scope"],
+      ["例如：拿到续约意向，守住年付八五折的底线", "e.g. Get a verbal yes on renewal; don't go below 15% off for annual"],
+      ["例如：我是 Cue 的产品负责人；语气专业、简洁；不要承诺具体上线日期。", "e.g. I'm the product lead for Cue; keep it professional and concise; don't promise exact launch dates."],
+      ["这些会放进每一次回答的提示里，回答会更贴合这场对话。每次开会前改一下就好。", "These go into every answer's prompt so answers fit this conversation. Update them before each meeting."],
       ["浏览器识别抢先听问题", "Browser recognizer listens ahead for questions"],
       ["Gemini 负责准确的文字；同时用浏览器自带识别（快几百毫秒）提前发现问题、开始起草回答。Gemini 卡住时自动顶上。只对麦克风有效，需选定说话语言。", "Gemini produces the accurate text; the browser's built-in recognizer (a few hundred ms faster) spots questions early and starts drafting. It also takes over if Gemini stalls. Mic only; needs a spoken language set."],
       ["Gemini 识别变慢，已临时改用浏览器识别。", "Gemini recognition is slow; using the browser recognizer for now."],
@@ -6260,10 +6322,7 @@
 
     function initUiLang() {
       S.uiLang = /^zh/i.test(navigator.language || "") ? "zh" : "en";
-      if (S.uiLang === "en") {
-        $("langSel").value = "en";
-        $("spokenLang").value = "en";
-      }
+      if (S.uiLang === "en") $("spokenLang").value = "en";
       i18nObserver.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: I18N_ATTRS });
       setUiLang(S.uiLang, true);
     }
@@ -6322,7 +6381,7 @@
         kind: "ask",
         displayQuestion: q,
         system: "You are my private assistant during a live conversation. Answer my question concisely using the transcript and my materials. " +
-          "If the answer is not there, say so. Plain text only, no Markdown; use \"• \" for lists. Reply in " + ($("langSel").value === "zh" ? "Chinese" : "English") + ".",
+          "If the answer is not there, say so. Plain text only, no Markdown; use \"• \" for lists. Reply in " + langName(convoLang()) + ".",
         user: (mats ? "[My materials]\n" + mats + "\n\n" : "") + "[Transcript]\n" + (transcript || "(nothing yet)") + "\n\n[My question]\n" + q
       });
     }
