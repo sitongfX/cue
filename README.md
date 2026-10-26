@@ -16,10 +16,13 @@ It's a single web page: no server, no build step. Everything runs in your browse
 
 - **Microphone first, no screen-share prompt**: *Start listening* uses only the microphone. On a call with headphones, tap **+ Meeting audio** at any time to add the meeting tab's sound (Chrome on desktop); Cue keeps the audio and drops the picture. On phones, the microphone hears everyone in the room.
 - **Automatic answers, as early as possible**: when the other side asks a question (with or without a question mark), an answer starts streaming right away. Cue even starts drafting from the words heard so far while they're still finishing the question; if the final question matches, the draft is kept. Each answer shows how fast it was ("Ready before they finished" or "0.6 s after they finished").
+- **Something to say in the first second**: while the full answer streams in, Cue shows a natural opener that fits the question type (pricing, comparison, timing, "why", a concern…), so you're never silent.
+- **Several questions at once**: if they ask two or three things in one breath, each one becomes a chip that's crossed off as you answer it, and the AI answers them in order.
 - **Next point to say**: once you start answering, points you've covered are crossed out and the next one is highlighted, updated as you speak.
 - **Live coaching while you speak**: Cue compares what you're saying with the question and your materials, and shows *Add:* (the most important missing point) or *Fix:* (something you got wrong), about a second after you pause.
-- **Talk-time meter**: shows how much of the conversation you've been talking and nudges you if you've been going for a while.
-- **Your materials, not made-up facts**: paste product docs, project notes or FAQs. Matching passages appear instantly, and the AI is told to use only your facts and numbers.
+- **Talk-time and filler meter**: shows how much of the conversation you've been talking, counts filler words (um, you know, 嗯, 那个), and nudges you gently.
+- **Your materials, not made-up facts**: paste product docs, project notes or FAQs. The AI is told to use only your facts and numbers.
+- **Search by meaning, with instant prepared answers**: with a Gemini key, every passage is embedded once (`gemini-embedding-001`, cached in your browser), and the question is embedded while it's still being asked. Paraphrased questions still find the right passage, and when it matches a Q&A in your materials the prepared answer appears immediately, before the AI responds. Keyword search is the fallback.
 - **Prep → Practice → Live → Review**
   - *Prep*: generate the 8 questions you're most likely to get and your best answers.
   - *Practice*: Cue asks questions by voice; you answer by voice or text; it scores you and suggests a better answer.
@@ -39,6 +42,15 @@ It's a single web page: no server, no build step. Everything runs in your browse
 3. **Settings → Audio → Test microphone** to check permission and input level.
 4. Optional: **Prep** → add your materials.
 5. Press **Start listening**. With headphones on a call, tap **+ Meeting audio**, pick the meeting's tab and keep *Share tab audio* on.
+
+## Optional: Cue extension (one-click meeting audio)
+
+The web page can only get another tab's sound through Chrome's share picker. The small extension in [`extension/`](extension/) (also downloadable as `cue-extension.zip`) removes that step:
+
+1. Unzip, open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and pick the folder.
+2. Open Cue and start listening. Then switch to your meeting tab and click the **Cue** icon in the toolbar.
+
+The extension asks Chrome for a capture id for that tab that only the Cue tab can redeem, and Cue opens the audio itself. Since Chrome mutes a captured tab, Cue plays it back so you still hear the meeting. No audio passes through the extension and nothing is recorded.
 
 ## Speech recognition
 

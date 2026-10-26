@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Cue · Meeting Audio",
+  "version": "1.0.0",
+  "description": "Gives Cue the sound of your meeting tab with one click, without the screen-share picker. Audio only; nothing is recorded.",
+  "permissions": ["tabCapture", "activeTab", "storage"],
+  "host_permissions": [
+    "https://sitongfx.github.io/cue/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://sitongfx.github.io/cue/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*",
+        "file:///*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "action": {
+    "default_title": "Cue: send this tab's sound to Cue",
+    "default_icon": { "128": "icon128.png" }
+  },
+  "icons": { "128": "icon128.png" }
+}

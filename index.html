@@ -187,6 +187,22 @@
     .points.cues li.next { border-color: var(--accent); }
     .answer.spec .q-tag { background: transparent; border: 1px dashed var(--line-2); color: var(--muted); }
     .answer.spec .lead, .answer.spec .points { opacity: .72; }
+    .listening { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; padding: 9vh 12px 0; color: var(--muted); }
+    .pulse-ring { width: 76px; height: 76px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); animation: ring 1.8s ease-out infinite; }
+    .pulse-ring svg { width: 30px; height: 30px; }
+    @keyframes ring { 0% { box-shadow: 0 0 0 0 rgba(201, 227, 111, .35); } 100% { box-shadow: 0 0 0 26px rgba(201, 227, 111, 0); } }
+    .listen-title { font-size: 20px; font-weight: 650; color: var(--text); margin-top: 6px; }
+    .listen-sub { font-size: 13.5px; max-width: 440px; }
+    .listen-live { margin-top: 14px; max-width: 560px; font-size: calc(17px * var(--scale)); color: var(--text-2); line-height: 1.55; min-height: 1.6em; }
+    .bridge { margin-top: 16px; display: flex; gap: 10px; align-items: baseline; font-size: calc(17px * var(--scale)); color: var(--text-2); }
+    .bridge-tag { flex-shrink: 0; font-size: 11px; font-weight: 650; color: var(--accent); border: 1px solid rgba(201, 227, 111, .45); border-radius: 6px; padding: 1px 6px; }
+    .subqs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .subq { font-size: 12.5px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line-2); color: var(--text-2); background: var(--raised); }
+    .subq.covered { color: var(--muted); text-decoration: line-through; border-color: rgba(201, 227, 111, .35); }
+    .subq b { color: var(--accent); margin-right: 4px; }
+    .instant { display: inline-block; margin-left: 8px; font-size: 11px; font-weight: 650; color: var(--accent-ink); background: var(--accent); border-radius: 6px; padding: 0 6px; }
+    .ext-way { margin-top: 14px; border: 1px solid rgba(201, 227, 111, .4); background: var(--accent-soft); border-radius: 12px; padding: 12px 14px; font-size: 13.5px; color: var(--text-2); }
+    .ext-way b { color: var(--accent); }
     .tab-steps { margin: 14px 0 0 18px; color: var(--text-2); font-size: 13.5px; display: flex; flex-direction: column; gap: 6px; }
     .lifecycle { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; margin-top: 14px; color: var(--muted); font-size: 12.5px; }
     .lifecycle b { color: var(--text-2); font-weight: 600; }
@@ -544,6 +560,13 @@
                 </div>
               </div>
 
+              <div class="listening" id="listenHint" hidden>
+                <div class="pulse-ring"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></div>
+                <div class="listen-title">正在听…</div>
+                <div class="listen-sub">对方一提问，回答会立刻出现在这里。也可以按 Space，或点对话里的任意一句。</div>
+                <div class="listen-live u" id="listenLive"></div>
+              </div>
+
               <div class="notice" id="noticeAi" hidden>
                 <span>还没有设置 AI 模型，目前只会显示资料库里匹配到的内容。</span>
                 <button class="btn" type="button" data-open-tab="model">去设置</button>
@@ -862,6 +885,13 @@
         </label>
         <label class="switch">
           <div>
+            <div class="label">按意思检索资料</div>
+            <div class="help">换个说法问也能找到你的资料，资料库里有现成答案时立刻显示。需要 Gemini Key。</div>
+          </div>
+          <input id="chkSemantic" type="checkbox" checked />
+        </label>
+        <label class="switch">
+          <div>
             <div class="label">提前起草回答</div>
             <div class="help">对方还没说完，Cue 就根据已经听到的内容开始起草；说完后意思没变就直接用，回答更快出现。</div>
           </div>
@@ -902,9 +932,14 @@
       <li>确认打开「同时分享标签页音频」，再点「共享」</li>
     </ol>
     <p>Cue 只取声音，画面会立即丢弃，也不会录制或上传视频。用桌面版 Zoom / 腾讯会议时，请选「整个屏幕」并打开「分享系统音频」（仅 Windows / ChromeOS 支持）。</p>
+    <div class="ext-way" id="extReady" hidden><b>已安装 Cue 扩展：</b>不用选共享窗口。切到会议所在的标签页，点浏览器右上角的 Cue 图标即可。</div>
+    <div class="ext-way" id="extPromo">
+      <b>想一键接入、不弹共享窗口？</b>装 Cue 扩展（Chrome）：下载后解压 → 打开 <code>chrome://extensions</code> → 打开右上角「开发者模式」→「加载已解压的扩展程序」选那个文件夹。之后在会议标签页点 Cue 图标即可。
+      <div class="row" style="margin-top: 10px;"><a class="btn" id="extDownload" href="https://sitongfx.github.io/cue/cue-extension.zip" download>下载 Cue 扩展</a></div>
+    </div>
     <div class="row" style="margin-top: 18px; justify-content: flex-end; gap: 8px;">
       <button class="btn" id="btnTabCancel" type="button">先不用</button>
-      <button class="btn btn-primary" id="btnTabGo" type="button">继续</button>
+      <button class="btn btn-primary" id="btnTabGo" type="button">用共享窗口选择</button>
     </div>
   </dialog>
 
@@ -1148,6 +1183,7 @@
         });
       });
       S.chunks = chunks;
+      scheduleSemIndex();
     }
 
     function addDoc(name, text) {
@@ -1251,7 +1287,7 @@
         background: $("bgInput").value, strictKb: S.strictKb ? "1" : "0", micDevice: S.micDevice,
         uiLang: S.uiLang, spokenLang: $("spokenLang").value, fastMic: $("chkFastMic").checked ? "1" : "0",
         translate: $("translateSel").value, liveStt: $("chkLiveStt").checked ? "1" : "0", coach: $("chkCoach").checked ? "1" : "0",
-        spec: $("chkSpec").checked ? "1" : "0", recap: $("chkRecap").checked ? "1" : "0"
+        spec: $("chkSpec").checked ? "1" : "0", recap: $("chkRecap").checked ? "1" : "0", semantic: $("chkSemantic").checked ? "1" : "0"
       };
     }
 
@@ -1271,6 +1307,7 @@
       if (st.coach) $("chkCoach").checked = st.coach === "1";
       if (st.spec) $("chkSpec").checked = st.spec === "1";
       if (st.recap) $("chkRecap").checked = st.recap === "1";
+      if (st.semantic) $("chkSemantic").checked = st.semantic === "1";
       if (st.uiLang && st.uiLang !== S.uiLang) setUiLang(st.uiLang, true);
       if (st.lang) $("langSel").value = st.lang;
       if (st.length) $("lengthSel").value = st.length;
@@ -1566,6 +1603,7 @@
       else setStatus("idle", "未开始");
       $("timerText").hidden = !S.listening;
       $("meters").hidden = !S.listening;
+      $("listenHint").hidden = !(S.listening && !S.current && document.body.dataset.view === "live");
       $("meterSpk").closest(".meter").hidden = !S.spk;
       $("btnAddTab").hidden = !(S.listening && CAN_SHARE_AUDIO && !S.spk && S.source !== "system");
       $("btnStartLabel").textContent = S.listening ? "停止" : "开始";
@@ -1626,6 +1664,8 @@
     function addUtterance(ch, rawText) {
       if (ch === "room" && S.spk) ch = "mic";
       const text = (rawText || "").replace(/\s+/g, " ").trim();
+      // Mic-only: a statement that echoes the answer on screen is you answering, not a new turn from them.
+      if (ch === "room" && looksLikeYouAnswering(text)) ch = "mic";
       if (!text || text.length < 2) return null;
       if (HALLUCINATIONS.some(function (h) { return text.indexOf(h) !== -1; })) return null;
       if (isEcho(ch, text)) return null;
@@ -1688,6 +1728,15 @@
       return u;
     }
 
+    function looksLikeYouAnswering(text) {
+      const a = S.current;
+      if (!a || a.kind !== "answer" || !a.text || Date.now() - a.id > 120000 || looksLikeQuestion(text)) return false;
+      const keys = (text.toLowerCase().match(/[a-z0-9.%]{3,}|[\u4e00-\u9fff]{2}/g) || []);
+      if (keys.length < 2) return false;
+      const ans = (a.text + " " + a.hits.map(function (h) { return h.text; }).join(" ")).replace(/\s+/g, "").toLowerCase();
+      return keys.filter(function (k) { return ans.indexOf(k) !== -1; }).length / keys.length >= 0.3;
+    }
+
     // While you talk, points you have already covered are crossed out so you only see what's left.
     function markCoveredPoints(spoken, preview) {
       const a = S.current;
@@ -1705,6 +1754,16 @@
         const hit = keys.filter(function (k) { return said.indexOf(k) !== -1; }).length;
         if (hit / keys.length >= 0.45) { a.covered[i] = true; changed = true; }
       });
+      if (a.subqs && a.subqs.length >= 2) {
+        a.subqsCovered = a.subqsCovered || {};
+        a.subqs.forEach(function (x, i) {
+          if (a.subqsCovered[i]) return;
+          const keys = (x.toLowerCase().replace(QWORDS_RE, " ").match(/[a-z0-9.%]{3,}|[\u4e00-\u9fff]{2}/g) || []);
+          if (keys.length < 1) return;
+          const hit = keys.filter(function (k) { return said.indexOf(k) !== -1; }).length;
+          if (hit / keys.length >= 0.4) { a.subqsCovered[i] = true; changed = true; }
+        });
+      }
       if (changed || !a.nextShown) { a.nextShown = true; updateAnswer(a); }
     }
 
@@ -1722,6 +1781,7 @@
     }
 
     function showInterim(text) {
+      if (!$("listenHint").hidden) $("listenLive").textContent = text || "";
       const node = $("interim");
       node.hidden = !text;
       node.textContent = text ? text + " …" : "";
@@ -2172,6 +2232,7 @@
       if (S.mic) S.mic.stop();
       if (S.spk) S.spk.stop();
       S.mic = null; S.spk = null;
+      stopExtPlayback();
       S.liveInterim = {};
       if (S.timerHandle) clearInterval(S.timerHandle);
       if (S.utts.length >= 4 && $("chkRecap").checked && aiReady()) setTimeout(function () { recap(true); }, 400);
@@ -2358,6 +2419,7 @@
     // If the best knowledge-base hit is a prepared "Q: … A: …" pair, show its answer instantly.
     function preparedAnswer(hits) {
       if (!hits.length) return "";
+      if (hits[0].cos !== undefined && hits[0].cos < 0.76) return "";   // only near-identical questions count as "prepared"
       const m = hits[0].text.match(/(?:^|\n)\s*(?:A|答)\d*[:：]\s*([\s\S]+)/);
       return m ? m[1].trim().split("\n")[0].slice(0, 160) : "";
     }
@@ -2400,6 +2462,11 @@
         text: prepared || (a.kind === "summary" ? "正在整理纪要…" : "正在思考…") });
       refs.points = el("ul", { class: "points" + (a.cue ? " cues" : "") });
       refs.raw = el("div", { class: "raw", hidden: true });
+      refs.bridge = el("div", { class: "bridge", hidden: true }, el("span", { class: "bridge-tag", text: "先说" }), el("span", { class: "u", text: a.bridge || "" }));
+      refs.subqs = el("div", { class: "subqs", hidden: !(a.subqs && a.subqs.length >= 2) });
+      (a.subqs || []).forEach(function (x, i) {
+        refs.subqs.appendChild(el("span", { class: "subq" }, el("b", { text: String(i + 1) }), el("span", { class: "u", text: x })));
+      });
       refs.coach = el("div", { class: "coach", hidden: true });
       refs.meta = el("span", { class: "answer-meta" });
       refs.needsAi = el("div", { class: "needs-ai", hidden: true },
@@ -2451,7 +2518,9 @@
         el("div", { class: "q" },
           el("span", { class: "q-tag", text: a.spec ? "预判中" : (KIND_LABELS[a.kind] || a.followLabel || "对方问") }),
           el("div", { class: "q-text", text: a.question })),
+        refs.subqs,
         refs.coach,
+        refs.bridge,
         refs.lead,
         refs.points,
         refs.raw,
@@ -2497,6 +2566,10 @@
         r.lead.textContent = "没能生成回答：" + a.error;
       }
       r.needsAi.hidden = a.status !== "needs-ai";
+      if (r.bridge) r.bridge.hidden = !(a.kind === "answer" && a.bridge && !a.text && streaming && !r.lead.classList.contains("prepared"));
+      if (r.subqs && a.subqsCovered) {
+        Array.prototype.forEach.call(r.subqs.children, function (chip, i) { chip.classList.toggle("covered", Boolean(a.subqsCovered[i])); });
+      }
       if (a.status === "aborted") {
         r.meta.textContent = "已被新的问题打断";
       } else if (a.status === "done") {
@@ -2536,6 +2609,7 @@
 
     function showAnswer(a) {
       S.current = a;
+      $("listenHint").hidden = true;
       mountAnswer(a);
       renderHistory();
       $("stage").scrollTop = 0;
@@ -2563,7 +2637,9 @@
         auto: Boolean(opts.auto),
         spec: Boolean(opts.spec),
         followLabel: opts.followLabel || "",
-        hits: opts.kind && opts.kind !== "answer" ? [] : retrieve(q + " " + (opts.base ? opts.base.question : ""), 2),
+        hits: opts.presetHits || (opts.kind && opts.kind !== "answer" ? [] : smartRetrieve(q + (opts.base ? " " + opts.base.question : ""), 2)),
+        subqs: opts.kind && opts.kind !== "answer" ? [] : splitQuestions(opts.displayQuestion || q),
+        bridge: opts.kind && opts.kind !== "answer" ? "" : bridgeLine(q),
         cue: $("lengthSel").value === "cue",
         text: "",
         status: "streaming",
@@ -2587,12 +2663,19 @@
         return;
       }
 
+      if (a.kind === "answer" && !opts.presetHits && !opts.base) refineHits(a, q, opts);
+      let extra = opts.extra;
+      if (!extra && a.subqs.length >= 2) {
+        extra = ($("langSel").value === "en" ? "They asked " + a.subqs.length + " questions at once: " : "对方一次问了 " + a.subqs.length + " 个问题：") +
+          a.subqs.map(function (x, i) { return (i + 1) + ") " + x; }).join(" ") +
+          ($("langSel").value === "en" ? "\nLine 1 should acknowledge all of them in one sentence; then give at least one point per question, in order." : "\n第1行用一句话同时回应；之后按顺序每个问题至少一个要点。");
+      }
       const ctl = new AbortController();
       S.abort = ctl;
       refreshStatus();
       const t0 = performance.now();
       try {
-        await streamAnswer(opts.system || systemText(), opts.user || userText(q, a.hits, opts.extra), ctl.signal, function (delta) {
+        await streamAnswer(opts.system || systemText(), opts.user || userText(q, a.hits, extra), ctl.signal, function (delta) {
           if (!a.ttft) { a.ttft = performance.now() - t0; a.firstAt = Date.now(); }
           a.text += delta;
           updateAnswer(a);
@@ -2910,6 +2993,7 @@
       renderProviders();
       renderReady();
       persistKb();
+      scheduleSemIndex();
       if ($("chkRememberKey").checked) vaultSave().catch(function () { toast("这个浏览器不能加密保存 Key。"); });
       toast(det.verified
         ? "已识别为 " + PROVIDERS[p].name + "，Key 可以用。"
@@ -3115,7 +3199,7 @@
     if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
       navigator.mediaDevices.addEventListener("devicechange", refreshMicDevices);
     }
-    ["scenarioSel", "langSel", "lengthSel", "bgInput", "chkStrict", "modelInput", "spokenLang", "chkFastMic", "translateSel", "chkLiveStt", "chkCoach", "chkSpec", "chkRecap"].forEach(function (id) {
+    ["scenarioSel", "langSel", "lengthSel", "bgInput", "chkStrict", "modelInput", "spokenLang", "chkFastMic", "translateSel", "chkLiveStt", "chkCoach", "chkSpec", "chkRecap", "chkSemantic"].forEach(function (id) {
       $(id).addEventListener("change", persistKb);
     });
     $("scenarioSel").addEventListener("change", function () {
@@ -3854,13 +3938,22 @@
     }
 
     // ---- Talk-time meter and long-monologue nudge (like sales call coaching tools) ----
-    const TALK = { me: 0, them: 0, run: 0, nudged: false };
+    const TALK = { me: 0, them: 0, run: 0, nudged: false, fill: 0, fillNudged: false };
+    const FILLER_RE = /(嗯+|呃+|那个那个|就是说|\bum+\b|\buh+\b|\berm\b|you know|kind of|sort of|basically)/gi;
 
     function noteTalk(ch, text) {
       const n = text.replace(/\s+/g, "").length;
       if (ch === "mic") {
         TALK.me += n;
         TALK.run += n;
+        const f = (text.match(FILLER_RE) || []).length;
+        if (f) {
+          TALK.fill += f;
+          if (!TALK.fillNudged && S.listening && TALK.fill >= 8) {
+            TALK.fillNudged = true;
+            toast(S.uiLang === "en" ? "Lots of filler words (um, you know). Slowing down a little sounds more confident." : "口头禅有点多（嗯、那个、就是说），稍微放慢一点会更有说服力。", 5000);
+          }
+        }
         if (!TALK.nudged && S.listening && TALK.run > 420) {
           TALK.nudged = true;
           toast(S.uiLang === "en" ? "You've been talking for a while. Consider pausing to ask what they think." : "你已经连续说了一段时间，可以停下来问问对方的想法。", 5000);
@@ -3877,9 +3970,10 @@
       const box = $("talkRatio");
       if (!box) return;
       const total = TALK.me + TALK.them;
-      if (!total || !TALK.them) { box.textContent = ""; return; }
+      if (!total || !TALK.them) { box.textContent = TALK.fill ? (S.uiLang === "en" ? "fillers " + TALK.fill : "口头禅 " + TALK.fill) : ""; return; }
       const me = Math.round(TALK.me * 100 / total);
-      box.textContent = S.uiLang === "en" ? "Me " + me + "% · Them " + (100 - me) + "%" : "我 " + me + "% · 对方 " + (100 - me) + "%";
+      box.textContent = (S.uiLang === "en" ? "Me " + me + "% · Them " + (100 - me) + "%" : "我 " + me + "% · 对方 " + (100 - me) + "%") +
+        (TALK.fill ? (S.uiLang === "en" ? " · fillers " + TALK.fill : " · 口头禅 " + TALK.fill) : "");
       box.classList.toggle("warn", me > 65);
     }
 
@@ -3937,7 +4031,7 @@
     });
 
     // ---- Early drafts: start answering while the other side is still finishing the question ----
-    const SPEC = { timer: null };
+    const SPEC = { timer: null, embLen: 0 };
     function normQ(t) { return (t || "").toLowerCase().replace(/[\s.,!?;:，。！？；：、"'“”‘’…-]+/g, ""); }
     function sameQuestion(a, b) {
       const x = normQ(a), y = normQ(b);
@@ -3965,6 +4059,7 @@
       if (ch === "mic" || (ch === "room" && S.spk) || S.autoMode === "off" || !S.listening || !$("chkSpec").checked || !aiReady()) return;
       const heard = (mid || "").trim();
       if (heard.length < 6) return;
+      if (looksLikeQuestion(heard) && Math.abs(heard.length - SPEC.embLen) >= 6) { SPEC.embLen = heard.length; semEmbedQuery(heard).catch(function () {}); }
       SPEC.timer = setTimeout(function () {
         SPEC.timer = null;
         if ((S.liveInterim[ch] || "").trim() !== heard) return;   // they're still talking
@@ -4020,8 +4115,18 @@
           toast(S.uiLang === "en" ? "No sound was shared. Pick the meeting tab and turn on “Share tab audio”." : "没有收到声音：请选会议所在的标签页，并打开「分享标签页音频」。", 7000);
           return false;
         }
-        const spkStream = new MediaStream(audio);
-        const spkEnded = function () { S.spk = null; refreshStatus(); if (!S.mic && S.listening) stopListening(); };
+        attachMeetingStream(new MediaStream(audio));
+        return true;
+      } catch (_) {
+        if (!only) toast(S.uiLang === "en" ? "Meeting audio not added. Cue keeps using the microphone." : "没有添加会议声音，继续只用麦克风。");
+        return false;
+      }
+    }
+
+    function attachMeetingStream(spkStream) {
+      const audio = spkStream.getAudioTracks();
+      {
+        const spkEnded = function () { S.spk = null; stopExtPlayback(); refreshStatus(); if (!S.mic && S.listening) stopListening(); };
         const spkSegments = function (st) {
           return createCapture(st, $("meterSpk"), function (wav) { onSegment("spk", wav); }, spkEnded);
         };
@@ -4032,10 +4137,6 @@
           if (sttRoute() === "browser" && trackRecognitionUsable()) startTrackRecognition("spk", audio[0]);
         }
         refreshStatus();
-        return true;
-      } catch (_) {
-        if (!only) toast(S.uiLang === "en" ? "Meeting audio not added. Cue keeps using the microphone." : "没有添加会议声音，继续只用麦克风。");
-        return false;
       }
     }
 
@@ -4043,7 +4144,8 @@
       const d = $("tabDialog");
       if (typeof d.showModal === "function") d.showModal(); else d.setAttribute("open", "");
     }
-    $("btnAddTab").addEventListener("click", openTabDialog);
+    $("btnAddTab").addEventListener("click", function () { extUi(); openTabDialog(); });
+    $("chkSemantic").addEventListener("change", scheduleSemIndex);
     $("btnTabCancel").addEventListener("click", function () { $("tabDialog").close(); });
     $("btnTabGo").addEventListener("click", async function () {
       $("tabDialog").close();
@@ -4068,6 +4170,195 @@
       const m = $("moreMenu");
       if (m.open && (!m.contains(ev.target) || ev.target.closest(".menu-pop .btn"))) m.open = false;
     });
+
+
+    // =====================================================================
+    // 15a3. Semantic retrieval, instant answers, bridge lines, Cue extension
+    // =====================================================================
+    // Each chunk of your materials is embedded once (gemini-embedding-001, 256 dims) and cached in IndexedDB.
+    // Questions are embedded while the other side is still talking, so ranking costs nothing at answer time.
+    var SEM = { model: "gemini-embedding-001", vecs: new Map(), q: new Map(), timer: null, busy: false, loaded: false };
+    function semUsable() { return Boolean(S.keys.gemini) && $("chkSemantic").checked; }
+    function hashStr(str) {
+      let h = 2166136261;
+      for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+      return (h >>> 0).toString(16) + ":" + str.length;
+    }
+    function chunkKey(c) { return c.key || (c.key = hashStr(c.doc + "\u0001" + c.text)); }
+    function unit(values) {
+      let n = 0;
+      for (let i = 0; i < values.length; i++) n += values[i] * values[i];
+      n = Math.sqrt(n) || 1;
+      const out = new Float32Array(values.length);
+      for (let i = 0; i < values.length; i++) out[i] = values[i] / n;
+      return out;
+    }
+    function dot(a, b) { let x = 0; for (let i = 0; i < a.length; i++) x += a[i] * b[i]; return x; }
+    async function embedTexts(texts, task) {
+      const r = await fetch(cloudUrl("https://generativelanguage.googleapis.com/v1beta/models/" + SEM.model + ":batchEmbedContents"), {
+        method: "POST", signal: timeoutSignal(15000),
+        headers: { "Content-Type": "application/json", "x-goog-api-key": S.keys.gemini },
+        body: JSON.stringify({ requests: texts.map(function (t) {
+          return { model: "models/" + SEM.model, content: { parts: [{ text: t.slice(0, 6000) }] }, taskType: task, outputDimensionality: 256 };
+        }) })
+      });
+      if (!r.ok) throw apiError("Embedding", r.status, await errDetail(r));
+      const j = await r.json();
+      return (j.embeddings || []).map(function (e) { return unit(e.values || []); });
+    }
+    async function semLoad() {
+      if (SEM.loaded) return;
+      SEM.loaded = true;
+      try {
+        const saved = await idbDo("readonly", function (st) { return st.get("emb"); });
+        if (saved && saved.model === SEM.model) saved.items.forEach(function (it) { SEM.vecs.set(it[0], new Float32Array(it[1])); });
+      } catch (_) {}
+    }
+    function scheduleSemIndex() {
+      if (!SEM) return;
+      clearTimeout(SEM.timer);
+      SEM.timer = setTimeout(semIndex, 600);
+    }
+    async function semIndex() {
+      if (!semUsable() || SEM.busy || !S.chunks.length) return;
+      SEM.busy = true;
+      try {
+        await semLoad();
+        const missing = S.chunks.filter(function (c) { return !SEM.vecs.has(chunkKey(c)); });
+        for (let i = 0; i < missing.length; i += 50) {
+          const batch = missing.slice(i, i + 50);
+          const vecs = await embedTexts(batch.map(function (c) { return c.doc + "\n" + c.text; }), "RETRIEVAL_DOCUMENT");
+          batch.forEach(function (c, j) { if (vecs[j]) SEM.vecs.set(chunkKey(c), vecs[j]); });
+        }
+        if (missing.length) {
+          const live = new Set(S.chunks.map(chunkKey));
+          const items = [];
+          SEM.vecs.forEach(function (v, k) { if (live.has(k) && items.length < 4000) items.push([k, Array.from(v)]); });
+          idbDo("readwrite", function (st) { return st.put({ model: SEM.model, items: items }, "emb"); }).catch(function () {});
+        }
+      } catch (_) { /* keyword search keeps working */ }
+      SEM.busy = false;
+    }
+    function semEmbedQuery(q) {
+      const key = normQ(q);
+      if (!semUsable() || !key) return Promise.resolve(null);
+      if (SEM.q.has(key)) return SEM.q.get(key);
+      const p = embedTexts([q], "RETRIEVAL_QUERY").then(function (v) { return v[0] || null; }).catch(function () { SEM.q.delete(key); return null; });
+      SEM.q.set(key, p);
+      p.then(function (v) { if (v) p.vec = v; });
+      if (SEM.q.size > 80) SEM.q.delete(SEM.q.keys().next().value);
+      return p;
+    }
+    // Ready vector for this question (or a near-identical one heard a moment ago), without waiting.
+    function semCachedVec(q) {
+      const key = normQ(q);
+      const exact = SEM.q.get(key);
+      if (exact && exact.vec) return exact.vec;
+      let best = null;
+      SEM.q.forEach(function (p, k) { if (!best && p.vec && sameQuestion(k, key)) best = p.vec; });
+      return best;
+    }
+    function smartRetrieve(query, k) {
+      const kw = retrieve(query, 6);
+      const qv = semUsable() ? semCachedVec(query) : null;
+      if (!qv || !SEM.vecs.size) return kw.slice(0, k);
+      const scored = [];
+      S.chunks.forEach(function (c) {
+        const v = SEM.vecs.get(chunkKey(c));
+        if (v) scored.push({ doc: c.doc, text: c.text, cos: dot(qv, v) });
+      });
+      if (!scored.length) return kw.slice(0, k);
+      scored.sort(function (a, b) { return b.cos - a.cos; });
+      const top = scored[0].cos;
+      const out = [];
+      scored.forEach(function (h) { if (out.length < k && h.cos >= 0.72 && h.cos >= top - 0.05) out.push(h); });
+      kw.forEach(function (h) { if (out.length < k && h.score >= 8 && !out.some(function (o) { return o.text === h.text; })) out.push(h); });
+      return out.length ? out : kw.slice(0, k);
+    }
+    // When the meaning-based match finishes after the answer started: show a prepared answer right away,
+    // or (if keyword search found nothing) restart with the right materials.
+    async function refineHits(a, q, opts) {
+      if (!semUsable() || !S.docs.length || semCachedVec(q)) return;
+      const v = await semEmbedQuery(q);
+      if (!v || S.current !== a || a.text) return;
+      const better = smartRetrieve(q, 2);
+      if (!better.length || (a.hits[0] && a.hits[0].text === better[0].text)) return;
+      if (!a.hits.length && a.status === "streaming") {
+        S.answers = S.answers.filter(function (x) { return x !== a; });
+        answer(q, Object.assign({}, opts, { presetHits: better }));
+      } else if (preparedAnswer(better)) {
+        a.hits = better;
+        mountAnswer(a);
+      }
+    }
+
+    // ---- Something to say in the first second, before the full answer arrives ----
+    function bridgeLine(q) {
+      const lang = $("langSel").value;
+      const en = lang === "en" || lang === "bilingual" || (lang !== "zh" && !CJK_RE.test(q || ""));
+      const t = (q || "").toLowerCase();
+      const pick = function (zh, e) { return en ? e : zh; };
+      if (/价格|多少钱|收费|费用|预算|报价|折扣|price|pricing|cost|budget|discount|how much/.test(t)) return pick("价格这块，我说一下我们是怎么算的。", "Good question on pricing. Here's how it works.");
+      if (/区别|不同|对比|相比|比.{0,6}(好|强|差)|竞品|vs\b|versus|differ|compare|compared|better than/.test(t)) return pick("最大的区别其实在这里。", "The biggest difference is this.");
+      if (/为什么|为啥|原因|why\b/.test(t)) return pick("主要有几个原因，我挑最关键的说。", "There are a few reasons; let me start with the main one.");
+      if (/例子|举个|比如|案例|example|instance|case study/.test(t)) return pick("我举个具体的例子。", "Let me give you a concrete example.");
+      if (/多久|什么时候|时间|周期|上线|timeline|how long|when\b|deadline/.test(t)) return pick("时间上大概是这样安排的。", "On timing, here's what to expect.");
+      if (/风险|担心|顾虑|安全|隐私|合规|risk|concern|worried|security|privacy|compliance/.test(t)) return pick("这个顾虑很合理，我们是这样处理的。", "That's a fair concern. Here's how we handle it.");
+      if (/怎么|如何|怎样|how\b/.test(t)) return pick("我们具体是这么做的。", "Here's how we approach it.");
+      return pick("好问题，我分两三点说。", "Good question. Let me break it down.");
+    }
+
+    // ---- Several questions in one turn: track each one ----
+    const QWORDS_RE = /(什么|怎么|如何|为什么|请问|能不能|能否|可不可以|是不是|有没有|多少|哪些|哪个|你们|我们|吗|呢)|\b(what|how|why|when|where|which|who|do|does|did|can|could|would|is|are|there|you|your|the|and|also)\b/g;
+    function splitQuestions(q) {
+      const parts = (q || "").split(/(?<=[？?])\s*/).map(function (x) { return x.trim(); })
+        .filter(function (x) { return x.length >= 4 && looksLikeQuestion(x); });
+      return parts.length >= 2 ? parts.slice(0, 4) : [];
+    }
+
+    // ---- Cue extension: one click on the meeting tab, no screen-share picker ----
+    const EXT = { present: false, audio: null };
+    function extUi() {
+      $("extReady").hidden = !EXT.present;
+      $("extPromo").hidden = EXT.present;
+    }
+    function stopExtPlayback() {
+      if (EXT.audio) { try { EXT.audio.pause(); EXT.audio.srcObject = null; } catch (_) {} EXT.audio = null; }
+      if (EXT.present) window.postMessage({ source: "cue-page", type: "stopped" }, window.origin === "null" ? "*" : window.origin);
+    }
+    async function attachExtStream(streamId, title) {
+      if (!S.listening) await startListening();
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: { mandatory: { chromeMediaSource: "tab", chromeMediaSourceId: streamId } }, video: false
+        });
+      } catch (e) {
+        toast((S.uiLang === "en" ? "Couldn't open the tab's audio: " : "没能打开标签页的声音：") + errMsg(e), 6000);
+        return;
+      }
+      if (S.spk) { const old = S.spk; S.spk = null; try { old.stop(); } catch (_) {} }
+      stopExtPlayback();
+      // Chrome mutes a captured tab; play it here so you still hear the meeting.
+      EXT.audio = new Audio();
+      EXT.audio.srcObject = stream;
+      EXT.audio.play().catch(function () {});
+      attachMeetingStream(stream);
+      try { $("tabDialog").close(); } catch (_) {}
+      toast((S.uiLang === "en" ? "Listening to the meeting tab: " : "已接入会议标签页：") + (title || "").slice(0, 40), 4000);
+    }
+    window.addEventListener("message", function (ev) {
+      if (ev.source !== window || !ev.data || ev.data.source !== "cue-ext") return;
+      const d = ev.data;
+      if (d.type === "hello") { EXT.present = true; extUi(); }
+      else if (d.type === "stream" && typeof d.streamId === "string") attachExtStream(d.streamId, String(d.title || ""));
+      else if (d.type === "error") {
+        toast(d.reason === "self"
+          ? (S.uiLang === "en" ? "Switch to the meeting tab, then click the Cue icon there." : "请切到会议所在的标签页，再点那里的 Cue 图标。")
+          : (S.uiLang === "en" ? "The extension couldn't capture that tab: " : "扩展没能接入这个标签页：") + String(d.reason || "").slice(0, 120), 6000);
+      }
+    });
+    window.postMessage({ source: "cue-page", type: "ping" }, window.origin === "null" ? "*" : window.origin);
 
     // =====================================================================
     // 15c. Interface language (中文 / English)
@@ -4260,6 +4551,17 @@
       ["正在评估…", "Evaluating…"], ["评估失败：", "Evaluation failed: "], ["得分 ", "Score "], ["已评估", "Evaluated"],
       ["这个浏览器不支持语音识别：请在设置里填 Gemini Key，或直接打字。", "This browser has no speech recognition: add a Gemini key in Settings, or type."],
       ["练习 · ", "Practice · "],
+      ["正在听…", "Listening…"],
+      ["对方一提问，回答会立刻出现在这里。也可以按 Space，或点对话里的任意一句。", "As soon as they ask something, the answer appears here. You can also press Space or tap any line in the conversation."],
+      ["先说", "Say first"],
+      ["按意思检索资料", "Search materials by meaning"],
+      ["换个说法问也能找到你的资料，资料库里有现成答案时立刻显示。需要 Gemini Key。", "Finds your materials even when the question is worded differently, and shows a prepared answer instantly. Needs a Gemini key."],
+      ["已安装 Cue 扩展：", "Cue extension installed: "],
+      ["不用选共享窗口。切到会议所在的标签页，点浏览器右上角的 Cue 图标即可。", "no share picker needed. Go to the meeting tab and click the Cue icon in the toolbar."],
+      ["想一键接入、不弹共享窗口？", "Want one-click, with no share picker?"],
+      ["装 Cue 扩展（Chrome）：下载后解压 → 打开 ", "Install the Cue extension (Chrome): download and unzip → open "],
+      [" → 打开右上角「开发者模式」→「加载已解压的扩展程序」选那个文件夹。之后在会议标签页点 Cue 图标即可。", " → turn on “Developer mode” → “Load unpacked” and pick the folder. Then click the Cue icon on your meeting tab."],
+      ["下载 Cue 扩展", "Download the Cue extension"], ["用共享窗口选择", "Use the share picker"],
       ["对方一提问，你就有一句能直接说的回答", "The moment they ask, you have a line you can say"],
       ["Cue 边听边提示：先答什么、下一点说什么、哪里说错了，全部基于你自己的资料。", "Cue listens and prompts you live: what to say first, what to cover next, and what to correct, all from your own materials."],
       ["开始收音", "Start listening"],
@@ -4502,7 +4804,8 @@
     initUiLang();
     refreshMicDevices();
     probe();
-    vaultLoad();
+    vaultLoad().then(function () { semLoad().then(scheduleSemIndex); });
+    extUi();
     setInterval(probe, 8000);
     if (/[?&]demo=1/.test(window.location.search)) setTimeout(runDemo, 300);
   })();
