@@ -1032,6 +1032,13 @@
         </label>
         <label class="switch">
           <div>
+            <div class="label">多模型抢答（更快）</div>
+            <div class="help">先用最快的模型；0.65 秒还没出字就同时请求另一个，谁先出字用谁，另一个立刻取消。会多用一点额度。</div>
+          </div>
+          <input id="chkRace" type="checkbox" checked />
+        </label>
+        <label class="switch">
+          <div>
             <div class="label">提前起草回答</div>
             <div class="help">对方还没说完，Cue 就根据已经听到的内容开始起草；说完后意思没变就直接用，回答更快出现。</div>
           </div>
@@ -1456,7 +1463,7 @@
         uiLang: S.uiLang, spokenLang: $("spokenLang").value, fastMic: $("chkFastMic").checked ? "1" : "0",
         translate: $("translateSel").value, liveStt: $("chkLiveStt").checked ? "1" : "0", coach: $("chkCoach").checked ? "1" : "0",
         spec: $("chkSpec").checked ? "1" : "0", recap: $("chkRecap").checked ? "1" : "0", semantic: $("chkSemantic").checked ? "1" : "0",
-        memory: $("chkMemory").checked ? "1" : "0", record: $("chkRecord").checked ? "1" : "0", roles: $("chkRoles").checked ? "1" : "0", contribute: $("chkContribute").checked ? "1" : "0", protect: $("chkProtect").checked ? "1" : "0", voiceMe: S.voiceMe ? String(S.voiceMe) : ""
+        memory: $("chkMemory").checked ? "1" : "0", record: $("chkRecord").checked ? "1" : "0", race: $("chkRace").checked ? "1" : "0", roles: $("chkRoles").checked ? "1" : "0", contribute: $("chkContribute").checked ? "1" : "0", protect: $("chkProtect").checked ? "1" : "0", voiceMe: S.voiceMe ? String(S.voiceMe) : ""
       };
     }
 
@@ -1479,6 +1486,7 @@
       if (st.semantic) $("chkSemantic").checked = st.semantic === "1";
       if (st.memory) $("chkMemory").checked = st.memory === "1";
       if (st.record) $("chkRecord").checked = st.record === "1";
+      if (st.race) $("chkRace").checked = st.race === "1";
       if (st.roles) $("chkRoles").checked = st.roles === "1";
       if (st.contribute) $("chkContribute").checked = st.contribute === "1";
       if (st.protect) { $("chkProtect").checked = st.protect === "1"; applyProtect(); }
@@ -1919,7 +1927,7 @@
         // Mic-only while you're answering: a question is probably yours. Wait for the speaker label first.
         if (ch === "room" && freshAnswer && S.current.talking && $("chkRoles").checked && aiReady()) {
           u.pendingAuto = true;
-          scheduleRoles();
+          scheduleRoles(true);
           return u;
         }
         // Questions: answer almost immediately. "Every turn" mode: also answer statements after a short pause.
@@ -2733,7 +2741,7 @@
         fetch(ca.base + "/v1/health", { headers: { "Authorization": "Bearer " + ca.secret } }).catch(function () {});
         return;
       }
-      if (!S.keys.gemini || Date.now() - warmedAt < 60000) return;
+      if (!S.keys.gemini || Date.now() - warmedAt < 20000) return;
       warmedAt = Date.now();
       geminiFetch(/^gemini/.test(S.model) ? S.model : PROVIDERS.gemini.model, "generateContent", {
         contents: [{ role: "user", parts: [{ text: "ok" }] }],
@@ -2904,10 +2912,11 @@
     // "Ready before they finished" / "0.6 s after they finished": the latency that matters in a live talk.
     function speedText(a) {
       const en = S.uiLang === "en";
+      const model = a.ttft ? (en ? " (model " + (a.ttft / 1000).toFixed(1) + " s)" : "（模型 " + (a.ttft / 1000).toFixed(1) + " 秒）") : "";
       if (a.finalAt && a.firstAt) {
         const lag = (a.firstAt - a.finalAt) / 1000;
-        if (lag <= 0.05) return en ? "Ready before they finished · " : "对方说完前就已就绪 · ";
-        return en ? lag.toFixed(1) + " s after they finished · " : "对方说完 " + lag.toFixed(1) + " 秒后出字 · ";
+        if (lag <= 0.05) return (en ? "Ready before they finished" : "对方说完前就已就绪") + model + " · ";
+        return (en ? lag.toFixed(1) + " s after they finished" : "对方说完 " + lag.toFixed(1) + " 秒后出字") + model + " · ";
       }
       return a.ttft ? (en ? (a.ttft / 1000).toFixed(1) + " s to first words · " : (a.ttft / 1000).toFixed(1) + " 秒出首字 · ") : "";
     }
@@ -3014,11 +3023,12 @@
       refreshStatus();
       const t0 = performance.now();
       try {
-        await streamAnswer(opts.system || systemText(), opts.user || userText(q, a.hits, extra), ctl.signal, function (delta) {
+        const runner = a.kind === "answer" && !opts.system ? streamRace : streamAnswer;
+        await runner(opts.system || systemText(), opts.user || userText(q, a.hits, extra), ctl.signal, function (delta) {
           if (!a.ttft) { a.ttft = performance.now() - t0; a.firstAt = Date.now(); }
           a.text += delta;
           updateAnswer(a);
-        });
+        }, function (c) { a.model = c.model; });
         a.status = a.text ? "done" : "error";
         if (!a.text) a.error = "模型没有返回内容";
       } catch (e) {
@@ -3570,7 +3580,7 @@
     if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
       navigator.mediaDevices.addEventListener("devicechange", refreshMicDevices);
     }
-    ["scenarioSel", "langSel", "lengthSel", "bgInput", "chkStrict", "modelInput", "spokenLang", "chkFastMic", "translateSel", "chkLiveStt", "chkCoach", "chkSpec", "chkRecap", "chkSemantic", "chkMemory", "chkContribute", "chkProtect", "chkRecord", "chkRoles"].forEach(function (id) {
+    ["scenarioSel", "langSel", "lengthSel", "bgInput", "chkStrict", "modelInput", "spokenLang", "chkFastMic", "translateSel", "chkLiveStt", "chkCoach", "chkSpec", "chkRecap", "chkSemantic", "chkMemory", "chkContribute", "chkProtect", "chkRecord", "chkRoles", "chkRace"].forEach(function (id) {
       $(id).addEventListener("change", persistKb);
     });
     $("scenarioSel").addEventListener("change", function () {
@@ -4090,6 +4100,7 @@
     //      audio, live speaking coach, talk-time meter, API error details
     // =====================================================================
     const LIVE_STT_MODEL = "gemini-3.5-transcribe-live";
+    const LIVE_SILENCE_MS = 200;
     const LIVE_URL = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent";
     S.liveInterim = {};
     S.trackRecs = [];
@@ -4160,7 +4171,7 @@
           sock.send(JSON.stringify({ setup: {
             model: "models/" + LIVE_STT_MODEL,
             generationConfig: { responseModalities: ["TEXT"] },
-            realtimeInputConfig: { automaticActivityDetection: { endOfSpeechSensitivity: "END_SENSITIVITY_HIGH", silenceDurationMs: 300 } },
+            realtimeInputConfig: { automaticActivityDetection: { endOfSpeechSensitivity: "END_SENSITIVITY_HIGH", silenceDurationMs: LIVE_SILENCE_MS } },
             inputAudioTranscription: {}
           } }));
         };
@@ -4544,14 +4555,16 @@
     function provisional(ch, mid, prov) {
       if (!S.listening) return;
       if (!prov.start) prov.start = Date.now();
-      if (Date.now() - prov.start < 4000) return;
       const parts = splitSentences(mid);
       const done = /[。！？；!?.]\s*$/.test(mid) ? parts : parts.slice(0, -1);
-      for (let i = prov.committed; i < done.length; i++) {
+      // A finished question is shown (and answered) immediately; other sentences after 2.5 s.
+      let upto = Date.now() - prov.start >= 2500 ? done.length : prov.committed;
+      for (let i = done.length - 1; i >= prov.committed; i--) { if (ch !== "mic" && isQuestion(done[i])) { upto = Math.max(upto, i + 1); break; } }
+      for (let i = prov.committed; i < upto; i++) {
         const u = addUtterance(ch, done[i], { prov: true });
         if (u) prov.utts.push(u);
       }
-      if (done.length > prov.committed) prov.committed = done.length;
+      if (upto > prov.committed) prov.committed = upto;
     }
     function commitFinal(ch, text, prov) {
       prov.utts.forEach(removeUtt);
@@ -5396,10 +5409,10 @@
 
     // ---- Mic-only: label who said what from the content (measured ~0.6–1 s, 8/8 correct on a test dialogue) ----
     const ROLES = { timer: null, busy: false };
-    function scheduleRoles() {
+    function scheduleRoles(now) {
       if (!$("chkRoles").checked || S.spk || !aiReady()) return;
       clearTimeout(ROLES.timer);
-      ROLES.timer = setTimeout(runRoles, 1200);
+      ROLES.timer = setTimeout(runRoles, now ? 0 : 1200);
     }
     async function runRoles() {
       if (ROLES.busy) { scheduleRoles(); return; }
@@ -5614,6 +5627,106 @@
     }
     $("srcHintAdd").addEventListener("click", function () { $("btnAddTab").click(); });
 
+
+    // =====================================================================
+    // 15a7. Speed: model racing, hot connection
+    // =====================================================================
+    // Live answers start on the model that has been fastest for you. If no words arrive within HEDGE_MS,
+    // a second request starts on the next model; whichever streams first wins and the other is cancelled.
+    const FAST_GEMINI = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3-flash-preview", "gemini-flash-lite-latest"];
+    const RACE = { hedgeMs: 650, stats: {} };   // stats[key] = moving average of time to first words (ms)
+    function raceCandidates() {
+      const out = [];
+      const add = function (provider, model) {
+        const key = provider + ":" + model;
+        if (!out.some(function (c) { return c.key === key; })) out.push({ key: key, provider: provider, model: model });
+      };
+      if (S.provider === "ollama") return [];
+      add(S.provider, S.model);
+      if (S.keys.gemini || S.keys.cue) {
+        const prov = S.keys.gemini ? "gemini" : "cue";
+        FAST_GEMINI.forEach(function (m) { add(prov, m); });
+      }
+      ["siliconflow", "deepseek", "zhipu", "qwen"].forEach(function (p) { if (S.keys[p]) add(p, PROVIDERS[p].model); });
+      // Fastest first (by what we've measured on this connection); the configured model breaks ties.
+      return out.sort(function (a, b) {
+        const ta = RACE.stats[a.key], tb = RACE.stats[b.key];
+        if (ta === undefined && tb === undefined) return 0;
+        if (ta === undefined) return a.key === S.provider + ":" + S.model ? -1 : 1;
+        if (tb === undefined) return b.key === S.provider + ":" + S.model ? 1 : -1;
+        return ta - tb;
+      });
+    }
+    function streamOne(c, sys, user, signal, onDelta) {
+      const key = S.keys[c.provider];
+      if (c.provider === "gemini") return streamGemini(key, c.model, sys, user, signal, onDelta);
+      if (c.provider === "cue") return cueFetch("/v1/chat", { system: sys, user: user, model: c.model }, signal).then(function (resp) {
+        return readStream(resp, function (line) {
+          if (line.indexOf("data: {") !== 0) return;
+          try { const t = JSON.parse(line.slice(6)).t; if (t) onDelta(t); } catch (_) {}
+        });
+      });
+      return streamOpenAI(PROVIDERS[c.provider].url, key, c.model, sys, user, signal, onDelta);
+    }
+    function noteSpeed(key, ms) {
+      const old = RACE.stats[key];
+      RACE.stats[key] = old === undefined ? ms : old * 0.7 + ms * 0.3;
+    }
+    // Resolves when the winning stream finishes. onWinner(candidate) is called once, at the first words.
+    function streamRace(sys, user, signal, onDelta, onWinner) {
+      const cands = $("chkRace").checked ? raceCandidates() : [];
+      if (cands.length < 2) return streamAnswer(sys, user, signal, onDelta);
+      return new Promise(function (resolve, reject) {
+        const running = [];
+        let winner = null, next = 0, failed = 0, hedgeTimer = null;
+        const t0 = performance.now();
+        const stopAll = function (except) {
+          running.forEach(function (r) { if (r !== except) { try { r.ctl.abort(); } catch (_) {} } });
+        };
+        signal.addEventListener("abort", function () {
+          stopAll(null); clearTimeout(hedgeTimer);
+          if (!winner) reject(new DOMException("aborted", "AbortError"));
+        });
+        const launch = function () {
+          if (winner || next >= cands.length || signal.aborted) return;
+          const c = cands[next++];
+          const r = { c: c, ctl: new AbortController() };
+          running.push(r);
+          streamOne(c, sys, user, r.ctl.signal, function (delta) {
+            if (!winner) {
+              winner = r;
+              clearTimeout(hedgeTimer);
+              noteSpeed(c.key, performance.now() - t0);
+              stopAll(r);
+              if (onWinner) onWinner(c);
+            }
+            if (winner === r) onDelta(delta);
+          }).then(function () {
+            if (winner === r) resolve();
+            else if (!winner) { failed++; launch(); if (failed >= next && next >= cands.length) reject(new Error("没有模型返回内容")); }
+          }).catch(function (e) {
+            if (winner === r) { reject(e); return; }
+            if (winner || signal.aborted) return;
+            noteSpeed(c.key, 5000);   // push failing models down the list
+            failed++;
+            if (failed >= cands.length) { reject(e); return; }
+            launch();   // a failure starts the backup right away
+          });
+          // Still no words: add a backup after 0.65 s, another after 1.5 s more (a failure starts one at once).
+          clearTimeout(hedgeTimer);
+          if (running.length <= 2) hedgeTimer = setTimeout(function () { if (!winner) launch(); }, running.length === 1 ? RACE.hedgeMs : 1500);
+        };
+        launch();
+      });
+    }
+
+    // Keep the connection to the model warm while listening, so the first answer skips connection setup.
+    setInterval(function () {
+      if (!S.listening || !aiReady()) return;
+      warmedAt = 0;
+      warmUp();
+    }, 25000);
+
     // =====================================================================
     // 15c. Interface language (中文 / English)
     // UI strings are written in Chinese; in English mode every visible UI text node and
@@ -5805,6 +5918,8 @@
       ["正在评估…", "Evaluating…"], ["评估失败：", "Evaluation failed: "], ["得分 ", "Score "], ["已评估", "Evaluated"],
       ["这个浏览器不支持语音识别：请在设置里填 Gemini Key，或直接打字。", "This browser has no speech recognition: add a Gemini key in Settings, or type."],
       ["练习 · ", "Practice · "],
+      ["多模型抢答（更快）", "Race models (faster)"],
+      ["先用最快的模型；0.65 秒还没出字就同时请求另一个，谁先出字用谁，另一个立刻取消。会多用一点额度。", "Starts on the fastest model; if no words arrive in 0.65 s, a second model is asked too, the first to respond wins and the other is cancelled. Uses a bit more quota."],
       ["搜索记录：问题、对方说的话、逐字稿…", "Search history: questions, what they said, transcripts…"],
       ["新对话", "New"], ["保存当前对话，开始一段新的（N）", "Save this conversation and start a new one (N)"],
       ["完整逐字稿", "Full transcript"], ["用录音重新生成每一个字都在的逐字稿，并标出说话人", "Re-transcribe the recording word for word, with speakers"],

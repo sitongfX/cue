@@ -19,6 +19,7 @@ It's a single web page: no server, no build step. Everything runs in your browse
 - **Practise what you were actually asked**: after a call, one tap turns the other side's questions into a practice set (read aloud, answer by voice, get scored).
 - **Searchable history**: search past conversations, including complete transcripts; titles come from the follow-up summary.
 - **New conversation (N)**: saves the current one to History and starts clean, even while listening.
+- **Model racing**: live answers start on the model that has been fastest for you; if no words arrive within 0.65 s (or a model errors), a backup model is asked in parallel, the first to stream wins and the rest are cancelled. Speeds are learned per connection, so a slow or overloaded model drops down the list automatically.
 - **Automatic answers, as early as possible**: when the other side asks a question (with or without a question mark), an answer starts streaming right away. Cue even starts drafting from the words heard so far while they're still finishing the question; if the final question matches, the draft is kept. Each answer shows how fast it was ("Ready before they finished" or "0.6 s after they finished").
 - **Something to say in the first second**: while the full answer streams in, Cue shows a natural opener that fits the question type (pricing, comparison, timing, "why", a concern…), so you're never silent.
 - **Several questions at once**: if they ask two or three things in one breath, each one becomes a chip that's crossed off as you answer it, and the AI answers them in order.
@@ -91,7 +92,7 @@ Installers for macOS (.dmg), Windows (.exe) and Linux (.AppImage) are built by G
 
 | What | Engine | Notes |
 |---|---|---|
-| Live transcript (mic and meeting audio) | **Gemini Live streaming** (`gemini-3.5-transcribe-live`, WebSocket) | Used whenever a Gemini key or Cue Cloud is set. 16 kHz audio in 50 ms frames with a 300 ms end-of-speech window: words appear while people talk, final text 0.1–0.3 s after they stop. Chinese and English auto-detected. Small pieces are merged into the same speaker's line, so slow speech with pauses isn't dropped. |
+| Live transcript (mic and meeting audio) | **Gemini Live streaming** (`gemini-3.5-transcribe-live`, WebSocket) | Used whenever a Gemini key or Cue Cloud is set. 16 kHz audio in 50 ms frames with a 200 ms end-of-speech window: words appear while people talk, final text about 0.03–0.25 s after they stop; a finished question sentence is acted on even before they stop. Chinese and English auto-detected. Small pieces are merged into the same speaker's line, so slow speech with pauses isn't dropped. |
 | Complete transcript after the call | `gemini-3.5-flash-lite` on the recording | A compressed recording (Opus, 32 kbps, 5-minute pieces) is kept **in memory only** during the call and re-transcribed word for word when you stop, with `[mm:ss]` timestamps and speaker labels. |
 | Who said what | Separate channels, or content-based labelling | With **+ Meeting audio**, your mic is "me" and the meeting tab is "them" (exact). With the mic only, `gemini-3.5-flash-lite` labels each line from the content and your materials about a second later; tap a label to fix it. |
 | No key | Browser speech recognition | One language at a time; words still pending when it pauses are kept. |

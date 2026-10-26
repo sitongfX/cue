@@ -34,7 +34,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 UPSTREAM = os.environ.get("UPSTREAM", "https://generativelanguage.googleapis.com").rstrip("/")
-CHAT_MODELS = {"gemini-3.5-flash-lite"}
+CHAT_MODELS = {"gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3-flash-preview", "gemini-flash-lite-latest"}
 DEFAULT_CHAT_MODEL = "gemini-3.5-flash-lite"
 EMBED_MODEL = "gemini-embedding-001"
 LIVE_WS = ("wss://generativelanguage.googleapis.com/ws/"
