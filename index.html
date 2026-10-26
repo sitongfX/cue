@@ -197,6 +197,10 @@
     .lead { margin-top: 18px; font-size: calc(22px * var(--scale)); line-height: 1.5; font-weight: 560; letter-spacing: -.1px; color: var(--text); }
     .lead.prepared { color: var(--text-2); }
     .lead.prepared::before { content: "你准备过的回答"; display: block; font-size: 11.5px; font-weight: 600; color: var(--accent); letter-spacing: .4px; margin-bottom: 4px; }
+    html[lang="en"] .lead.prepared::before { content: "Your prepared answer"; }
+    .utt-tr { font-size: 13px; color: var(--muted); border-left: 2px solid var(--line-2); padding-left: 8px; margin-top: 3px; }
+    .chip.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+    .composer .chip { flex-shrink: 0; }
     .lead.placeholder { color: var(--muted); font-weight: 400; font-size: 15px; }
     .points { list-style: none; margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
     .points li { position: relative; padding-left: 18px; color: var(--text-2); font-size: calc(15px * var(--scale)); line-height: 1.6; }
@@ -370,6 +374,7 @@
       <button class="icon-btn" id="btnPip" type="button" title="浮窗：把回答放进置顶小窗，放在摄像头旁边">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="12" width="7" height="5" rx="1"/></svg>
       </button>
+      <button class="btn btn-ghost u" id="btnLang" type="button" title="中文 / English">EN</button>
       <button class="icon-btn" id="btnSettings" type="button" title="设置（模型 / 声音 / 回答）">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
       </button>
@@ -459,7 +464,7 @@
                     <div class="step-ico">2</div>
                     <div class="step-body">
                       <div class="step-title">我的资料 <span class="help">（可选，强烈推荐）</span></div>
-                      <div class="step-desc" id="stepKbDesc">粘贴简历、项目经历或常见问答。回答会引用你的真实经历和数字，而不是瞎编。</div>
+                      <div class="step-desc" id="stepKbDesc">粘贴产品资料、项目经历或常见问答。回答会引用你的真实经历和数字，而不是瞎编。</div>
                     </div>
                     <div class="step-actions">
                       <button class="btn" id="btnPrep" type="button" hidden title="根据你的资料，提前生成对方最可能问的问题和你的最佳回答">演练</button>
@@ -507,6 +512,7 @@
 
         <div class="composer-wrap">
           <form class="composer" id="composer" autocomplete="off">
+            <button class="chip" id="composerMode" type="button" title="切换：帮我回答对方的问题 / 私下问 Cue 关于这场对话的问题">对方问</button>
             <input id="composerInput" type="text" enterkeyhint="send" placeholder="输入对方的问题，回车获取回答" />
             <button class="btn btn-primary" type="submit" style="height: 32px;">回答</button>
           </form>
@@ -531,15 +537,16 @@
             <div class="field">
               <span class="label">场景</span>
               <select class="select" id="scenarioSel">
-                <option value="meeting">通用会议</option>
-                <option value="interview">求职面试</option>
-                <option value="sales">销售 / 谈判</option>
-                <option value="tech">技术评审 / 答辩</option>
+                <option value="meeting">团队会议</option>
+                <option value="sales">客户沟通 / 销售</option>
+                <option value="presentation">演讲后的问答</option>
+                <option value="tech">技术评审</option>
+                <option value="support">客服 / 答疑</option>
               </select>
             </div>
             <div class="field">
               <span class="label">补充背景</span>
-              <textarea class="textarea" id="bgInput" style="min-height: 90px;" placeholder="例如：我在面试 XX 公司的后端岗位；对方是技术总监；希望语气自信简洁。"></textarea>
+              <textarea class="textarea" id="bgInput" style="min-height: 90px;" placeholder="例如：今天和 XX 客户讨论续约；对方是采购负责人；希望语气专业简洁。"></textarea>
             </div>
           </div>
 
@@ -559,12 +566,12 @@
             <div class="row" style="justify-content: space-between;">
               <div class="card-title">添加资料</div>
               <div class="row" style="gap: 6px;">
-                <button class="chip" type="button" data-tpl="resume">简历模板</button>
+                <button class="chip" type="button" data-tpl="resume">个人 / 项目介绍</button>
                 <button class="chip" type="button" data-tpl="qa">问答模板</button>
-                <button class="chip" type="button" data-tpl="jd">岗位 / 客户</button>
+                <button class="chip" type="button" data-tpl="jd">对方 / 客户信息</button>
               </div>
             </div>
-            <input class="input" id="docTitle" type="text" placeholder="标题，例如：我的简历" />
+            <input class="input" id="docTitle" type="text" placeholder="标题，例如：产品介绍" />
             <textarea class="textarea" id="docText" placeholder="直接粘贴内容。&#10;&#10;小技巧：按「Q: 问题 / A: 答案」的格式写常见问题，命中会更精准。"></textarea>
             <div class="row">
               <button class="btn btn-primary" id="btnAddDoc" type="button">添加到资料库</button>
@@ -610,7 +617,7 @@
                 <option value="common">常见问题</option>
                 <option value="deep">追问细节</option>
                 <option value="tough">刁钻问题</option>
-                <option value="behavior">行为面试（讲一个例子）</option>
+                <option value="behavior">讲一个具体例子</option>
               </select>
               <label class="row" style="gap: 6px; font-size: 13px; color: var(--text-2);"><input id="pracSpeak" type="checkbox" checked style="width: 18px; height: 18px; accent-color: var(--accent);" /> 朗读题目</label>
               <button class="btn btn-primary" id="btnPracNext" type="button">出一道题</button>
@@ -741,10 +748,25 @@
           <span class="help" id="micTestMsg">戴耳机开会效果最好：对方的声音不会被麦克风重复收进来。</span>
         </div>
         <div class="field">
+          <span class="label">说话的语言</span>
+          <select class="select" id="spokenLang">
+            <option value="zh">中文</option>
+            <option value="en">English</option>
+            <option value="mix">中英混合（用 Gemini 识别，稍慢）</option>
+          </select>
+        </div>
+        <label class="switch">
+          <div>
+            <div class="label">极速识别我的麦克风</div>
+            <div class="help">用浏览器自带的识别，边说边出字，最快；一次只能识别一种语言。电脑声音仍用 Gemini 识别。</div>
+          </div>
+          <input id="chkFastMic" type="checkbox" checked />
+        </label>
+        <div class="field">
           <span class="label">什么时候自动回答</span>
           <select class="select" id="autoMode">
             <option value="question" selected>对方一提问就回答（推荐）</option>
-            <option value="turn">对方每说完一段都回答（适合面试）</option>
+            <option value="turn">对方每说完一段都回答（适合问答环节）</option>
             <option value="off">不自动，按 Space 或点句子再回答</option>
           </select>
         </div>
@@ -774,7 +796,16 @@
             <option value="cue">提示卡 · 一句开场 + 几个关键词（不用照念，说出来更自然）</option>
           </select>
         </div>
-        <p class="help">场景和补充背景在左侧「准备」页面里设置。</p>
+        <div class="field">
+          <span class="label">实时翻译对方的话</span>
+          <select class="select" id="translateSel">
+            <option value="off">不翻译</option>
+            <option value="zh">翻译成中文</option>
+            <option value="en">翻译成英文</option>
+          </select>
+          <span class="help">跨语言沟通时，每句对方的话下面会显示译文。</span>
+        </div>
+        <p class="help">场景和补充背景在「准备」页面里设置。</p>
       </div>
     </div>
     <div class="drawer-foot">
@@ -1068,7 +1099,7 @@
       });
     }
     function browserSave() {
-      const docs = S.docs.filter(function (d) { return d.name !== DEMO_DOC.title; });
+      const docs = S.docs.filter(function (d) { return !isDemoDoc(d.name); });
       return idbDo("readwrite", function (st) { return st.put({ docs: docs, settings: currentSettings() }, "state"); });
     }
     async function browserLoad() {
@@ -1100,7 +1131,7 @@
               .catch(function () { S.kbDirty = true; $("kbSaveState").textContent = "保存失败，请用「导出资料库」备份"; });
           }, 500);
         } else {
-          S.kbDirty = S.docs.some(function (d) { return d.name !== DEMO_DOC.title; });
+          S.kbDirty = S.docs.some(function (d) { return !isDemoDoc(d.name); });
         }
         return;
       }
@@ -1110,7 +1141,7 @@
         try {
           const r = await fetch(localUrl("/api/kb"), {
             method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ docs: S.docs.filter(function (d) { return d.name !== DEMO_DOC.title; }), settings: currentSettings() })
+            body: JSON.stringify({ docs: S.docs.filter(function (d) { return !isDemoDoc(d.name); }), settings: currentSettings() })
           });
           const data = r.ok ? await r.json() : { ok: false };
           $("kbSaveState").textContent = data.ok ? "已自动保存到本机" : "保存失败，可以先导出备份";
@@ -1124,7 +1155,9 @@
       return {
         provider: S.provider, model: S.model, source: S.source, autoMode: S.autoMode,
         scenario: $("scenarioSel").value, lang: $("langSel").value, length: $("lengthSel").value,
-        background: $("bgInput").value, strictKb: S.strictKb ? "1" : "0", micDevice: S.micDevice
+        background: $("bgInput").value, strictKb: S.strictKb ? "1" : "0", micDevice: S.micDevice,
+        uiLang: S.uiLang, spokenLang: $("spokenLang").value, fastMic: $("chkFastMic").checked ? "1" : "0",
+        translate: $("translateSel").value
       };
     }
 
@@ -1135,7 +1168,11 @@
       if (st.source && SOURCES[st.source]) S.source = st.source;
       applyDeviceLimits();
       if (st.autoMode) { S.autoMode = st.autoMode; $("autoMode").value = st.autoMode; }
-      if (st.scenario) $("scenarioSel").value = st.scenario;
+      if (st.scenario) $("scenarioSel").value = st.scenario === "interview" ? "presentation" : st.scenario;
+      if (st.spokenLang) $("spokenLang").value = st.spokenLang;
+      if (st.fastMic) $("chkFastMic").checked = st.fastMic === "1";
+      if (st.translate) $("translateSel").value = st.translate;
+      if (st.uiLang && st.uiLang !== S.uiLang) setUiLang(st.uiLang, true);
       if (st.lang) $("langSel").value = st.lang;
       if (st.length) $("lengthSel").value = st.length;
       if (typeof st.background === "string") $("bgInput").value = st.background;
@@ -1251,27 +1288,26 @@
 
     const TEMPLATES = {
       resume: {
-        title: "我的简历",
+        title: "关于我和我的项目",
         text:
-          "## 基本信息\n姓名：____  目标岗位：____  工作年限：__ 年\n\n" +
-          "## 项目一：____\n" +
-          "背景：（要解决什么问题，规模多大）\n" +
-          "我做了什么：（你负责的关键决策和动作）\n" +
-          "结果：（用数字说话，例如延迟降低 60%，成本下降 30%）\n\n" +
-          "## 项目二：____\n背景：\n我做了什么：\n结果：\n\n" +
-          "## 核心优势\n1. \n2. \n3. "
+          "## 关于我\n角色：____  负责：____\n\n" +
+          "## 项目 / 产品：____\n" +
+          "要解决什么问题：\n" +
+          "我们怎么做的：（关键决策和做法）\n" +
+          "结果：（用数字说话，例如成本下降 30%，用户增长 2 倍）\n\n" +
+          "## 常用的数字和事实\n1. \n2. \n3. "
       },
       qa: {
         title: "常见问题",
         text:
-          "Q: 请做一个简单的自我介绍\nA: \n\n" +
-          "Q: 你最有成就感的项目是什么？\nA: \n\n" +
-          "Q: 你最大的缺点是什么？\nA: \n\n" +
-          "Q: 为什么想加入我们？\nA: \n\n" +
-          "Q: 你的期望薪资是多少？\nA: "
+          "Q: 能简单介绍一下你们的产品吗？\nA: \n\n" +
+          "Q: 和竞品相比有什么不同？\nA: \n\n" +
+          "Q: 价格是怎么算的？\nA: \n\n" +
+          "Q: 上线需要多久？\nA: \n\n" +
+          "Q: 出了问题怎么支持？\nA: "
       },
       jd: {
-        title: "岗位 / 客户信息",
+        title: "对方 / 客户信息",
         text:
           "## 对方是谁\n公司 / 团队：\n参会人与角色：\n\n" +
           "## 他们最关心什么\n1. \n2. \n\n" +
@@ -1281,7 +1317,7 @@
     };
 
     const DEMO_DOC = {
-      title: "示例 · 技术面试问答",
+      title: "示例 · 产品问答",
       text:
         "Q: 如果跨国网络抖动到 2 秒以上，怎么保证实时语音体验？\n" +
         "A: 三层兜底：客户端 256ms 预缓冲 + 静音处切片，断网时本地排队，恢复后 0.3 秒追平；服务端超过 1.2 秒自动降级到轻量模型，保证首句不超时。上线后弱网投诉下降 72%。\n\n" +
@@ -1298,7 +1334,7 @@
       list.replaceChildren();
       $("kbBadge").textContent = S.docs.length ? String(S.docs.length) : "";
       if (!S.docs.length) {
-        list.appendChild(el("div", { class: "doc-empty", text: "还没有资料。粘贴或上传你的简历、问答、产品资料。" }));
+        list.appendChild(el("div", { class: "doc-empty", text: "还没有资料。粘贴或上传你的产品资料、项目经历或常见问答。" }));
         return;
       }
       S.docs.forEach(function (d) {
@@ -1394,7 +1430,7 @@
 
       $("btnPrep").hidden = !S.docs.length;
       if (S.docs.length) setStep("stepKb", "done", "已添加 " + S.docs.length + " 份：" + S.docs.map(function (d) { return d.name; }).join("、"));
-      else setStep("stepKb", "todo", "粘贴简历、项目经历或常见问答。回答会引用你的真实经历和数字，而不是瞎编。");
+      else setStep("stepKb", "todo", "粘贴产品资料、项目经历或常见问答。回答会引用你的真实经历和数字，而不是瞎编。");
 
       if (micBlockedByHost()) {
         setStep("stepAudio", "warn", "这个网站不允许网页用麦克风 · 点「开始」查看换哪个地址打开，或先用左下角打字提问");
@@ -1511,6 +1547,7 @@
       }
       const convo = $("convo");
       convo.scrollTop = convo.scrollHeight;
+      scheduleTranslate(u);
 
       if (ch !== "mic" && S.autoMode !== "off") {
         if (S.autoTimer) clearTimeout(S.autoTimer);
@@ -1623,7 +1660,7 @@
       const mute = ctx.createGain();
       mute.gain.value = 0;
 
-      const HANGOVER_MS = 320, SOFT_MAX_MS = 2800, HARD_MAX_MS = 7000, MIN_MS = 260;
+      const HANGOVER_MS = 280, SOFT_MAX_MS = 2200, HARD_MAX_MS = 6000, MIN_MS = 260;
       let pre = [], chunks = [], len = 0, speaking = false, silence = 0, noise = 0.004, stopped = false;
 
       function flush() {
@@ -1743,7 +1780,8 @@
       const resp = await geminiFetch(GEMINI_STT_MODEL, "generateContent", {
         contents: [{ role: "user", parts: [
           { inlineData: { mimeType: "audio/wav", data: b64 } },
-          { text: "逐字转写这段音频里的人声（中文、英文或中英混杂）。只输出转写文本；没有清晰人声就输出空。" + (bg ? "\n可能出现的词：" + bg : "") }
+          { text: "Transcribe the speech in this audio verbatim, in the language(s) actually spoken" + spokenHint() +
+            ". Never translate. Output only the transcript, or nothing if there is no clear speech." + (bg ? "\nWords that may appear: " + bg : "") }
         ] }],
         generationConfig: { temperature: 0, maxOutputTokens: 400 }
       }, timeoutSignal(15000));
@@ -1787,6 +1825,7 @@
     }
 
     async function onSegment(ch, wav) {
+      if (ch !== "spk" && S.fastMic) return;   // the browser's live recognizer already handles the microphone
       const route = sttRoute();
       if (route === "browser") {
         if (ch === "spk" && !S.warnedNoSpkStt) {
@@ -1819,7 +1858,7 @@
       const rec = new Rec();
       rec.continuous = true;
       rec.interimResults = true;
-      rec.lang = $("langSel").value === "zh" ? "zh-CN" : "en-US";
+      rec.lang = recognitionLang();
       rec.onresult = function (ev) {
         let interim = "";
         for (let i = ev.resultIndex; i < ev.results.length; i++) {
@@ -1928,7 +1967,8 @@
           S.mic = createCapture(ms, $("meterMic"),
             function (wav) { onSegment(ch, wav); },
             function () { S.mic = null; if (!S.spk && S.listening) stopListening(); });
-          if (sttRoute() === "browser") startRecognition(ch);
+          S.fastMic = fastMicUsable();
+          if (sttRoute() === "browser" || S.fastMic) startRecognition(ch);
         } catch (e) {
           openMicDialog(e);
         }
@@ -2041,7 +2081,8 @@
     // =====================================================================
     const SCENARIO_PROMPTS = {
       meeting: "你是我在会议中的实时发言助手。",
-      interview: "你是我在求职面试中的实时助手。回答要体现专业能力，自然地使用「背景-行动-结果」的结构，并给出量化成果。",
+      presentation: "我刚做完一场分享，现在是问答环节，你帮我实时作答。回答要直接回应提问，先给结论，再给一个具体的数字或例子。",
+      support: "你是我在客服 / 答疑中的实时助手。先确认对方的问题，再给出清楚、可执行的步骤；不确定的地方说明会跟进。",
       sales: "你是我在商务沟通和谈判中的实时助手。先认可对方的关切，再守住我方的核心价值，最后给出双赢的方案。",
       tech: "你是资深工程师，在技术评审或答辩中帮我作答，强调取舍、关键指标和边界情况。"
     };
@@ -2296,7 +2337,7 @@
       if (a.text && RAW_KINDS[a.kind]) {
         r.lead.hidden = true;
         r.raw.hidden = false;
-        r.raw.textContent = a.text;
+        r.raw.textContent = a.text.replace(/\*\*(.+?)\*\*/g, "$1").replace(/^\s*[*-]\s+/gm, "• ");
         r.raw.classList.toggle("caret", streaming);
       } else if (a.text) {
         const p = parseAnswer(a.text);
@@ -2337,7 +2378,7 @@
       past.forEach(function (a) {
         const p = parseAnswer(a.text || "");
         list.appendChild(el("button", { class: "hist-item", type: "button", onclick: function () { showAnswer(a); } },
-          el("span", { class: "hist-q", text: a.question }),
+          el("span", { class: "hist-q u", text: a.question }),
           el("span", { class: "hist-a", text: p.lead || (a.hits[0] ? a.hits[0].text.slice(0, 80) : "") })));
       });
     }
@@ -2425,8 +2466,8 @@
       });
     }
 
-    const KIND_LABELS = { summary: "纪要", prep: "演练", review: "复盘" };
-    const RAW_KINDS = { prep: true, review: true };
+    const KIND_LABELS = { summary: "纪要", prep: "演练", review: "复盘", ask: "问 Cue", translate: "翻译" };
+    const RAW_KINDS = { prep: true, review: true, ask: true };
     const PREP_DOC = "预演 · 可能被问的问题";
 
     function kbHeadline(hits) {
@@ -2448,7 +2489,7 @@
       const scen = $("scenarioSel").options[$("scenarioSel").selectedIndex].textContent;
       const bg = $("bgInput").value.trim();
       const mats = materialsDigest(7000);
-      if (!mats && !bg) { toast("先在资料库里放点内容（简历、岗位、产品资料），演练才有针对性。"); openDrawer("kb"); return; }
+      if (!mats && !bg) { toast("先在资料库里放点内容（产品资料、项目经历、常见问答），演练才有针对性。"); openDrawer("kb"); return; }
       answer("会前演练", {
         kind: "prep",
         displayQuestion: "根据你的资料，对方最可能问的 8 个问题（已存入资料库，现场被问到时会立刻显示）",
@@ -2501,7 +2542,11 @@
     // 12. Demo
     // =====================================================================
     async function playDemoAnswer(a) {
-      const canned = a.followLabel
+      const canned = S.uiLang === "en"
+        ? (a.followLabel
+          ? "Here's a concrete example: during last year's peak season, poor-network complaints dropped 72%.\n• Client-side buffering means no words are lost during dropouts\n• Anything slower than 1.2 s switches to a lighter model\n• Playback catches up 0.3 s after the network recovers"
+          : "We built three layers of fallback, so even with 2-second network jitter users barely notice.\n• A 256 ms client buffer queues audio during dropouts and catches up in 0.3 s\n• If the server takes over 1.2 s, it falls back to a lighter model so the first line is never late\n• Silence is filtered on the client (about 65%), so at 50k concurrent users the cost is a third of the original")
+        : a.followLabel
         ? "我举个具体的例子：去年双十一高峰，我们的弱网投诉直接下降了 72%。\n• 客户端预缓冲让断网时不丢字\n• 超过 1.2 秒自动切到轻量模型\n• 恢复网络后 0.3 秒追平进度"
         : "我们做了三层兜底，就算网络抖到 2 秒，用户也几乎感觉不到卡顿。\n• 客户端 256ms 预缓冲，断网时本地排队，恢复后 0.3 秒追平\n• 服务端超过 1.2 秒自动降级到轻量模型，首句不超时\n• 静音帧在客户端过滤掉约 65%，5 万并发下成本只有原来的三分之一";
       refreshStatus();
@@ -2517,14 +2562,30 @@
       refreshStatus();
     }
 
+    const DEMO_DOC_EN = {
+      title: "Example · product FAQ",
+      text:
+        "Q: If cross-border network jitter goes above 2 seconds, how do you keep real-time voice working?\n" +
+        "A: Three layers of fallback: a 256 ms client buffer that splits on silence and queues audio during dropouts, catching up 0.3 s after recovery; " +
+        "the server falls back to a lighter model after 1.2 s so the first line is never late. Poor-network complaints dropped 72% after launch.\n\n" +
+        "Q: Can cost and a 99.95% SLA hold up with 50,000 people online at once?\n" +
+        "A: Yes. Client-side VAD filters out about 65% of silent frames; the server is stateless and scales horizontally. " +
+        "At 50k concurrent users CPU sat at 58%, and per-stream cost is a third of uploading everything."
+    };
+
+    function isDemoDoc(name) { return name === DEMO_DOC.title || name === DEMO_DOC_EN.title; }
+
     async function runDemo() {
-      if (!S.docs.length) addDoc(DEMO_DOC.title, DEMO_DOC.text);
+      const en = S.uiLang === "en";
+      const doc = en ? DEMO_DOC_EN : DEMO_DOC;
+      if (!S.docs.length) addDoc(doc.title, doc.text);
       $("ready").hidden = true;
       const savedMode = S.autoMode;
       S.autoMode = "off";
-      addUtterance("spk", "你们这个实时语音产品，如果跨国网络抖动到 2 秒以上，怎么保证体验不崩？");
+      addUtterance("spk", en ? "If cross-border network jitter goes above 2 seconds, how does your real-time voice product stay usable?"
+        : "你们这个实时语音产品，如果跨国网络抖动到 2 秒以上，怎么保证体验不崩？");
       await sleep(500);
-      addUtterance("spk", "而且 5 万人同时在线的话，成本扛得住吗？");
+      addUtterance("spk", en ? "And with 50,000 people online at once, can the cost hold up?" : "而且 5 万人同时在线的话，成本扛得住吗？");
       S.autoMode = savedMode;
       if (S.autoTimer) clearTimeout(S.autoTimer);
       S.lastAutoQ = latestTheirTurn();
@@ -2842,14 +2903,14 @@
     if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
       navigator.mediaDevices.addEventListener("devicechange", refreshMicDevices);
     }
-    ["scenarioSel", "langSel", "lengthSel", "bgInput", "chkStrict", "modelInput"].forEach(function (id) {
+    ["scenarioSel", "langSel", "lengthSel", "bgInput", "chkStrict", "modelInput", "spokenLang", "chkFastMic", "translateSel"].forEach(function (id) {
       $(id).addEventListener("change", persistKb);
     });
     $("scenarioSel").addEventListener("change", function () {
-      if ($("scenarioSel").value === "interview" && S.autoMode === "question") {
+      if ($("scenarioSel").value === "presentation" && S.autoMode === "question") {
         S.autoMode = "turn";
         $("autoMode").value = "turn";
-        toast("面试场景：已改为对方每说完一段就自动回答。");
+        toast("问答环节：已改为对方每说完一段就自动回答。");
       }
     });
 
@@ -2858,6 +2919,7 @@
       const v = $("composerInput").value.trim();
       if (!v) return;
       $("composerInput").value = "";
+      if (S.askMode) { askCue(v); return; }
       const u = addUtterance("spk", v);
       if (S.autoTimer) clearTimeout(S.autoTimer);
       S.lastAutoQ = v;
@@ -3135,7 +3197,7 @@
       common: "最常见、最可能被问到的问题",
       deep: "针对我资料里某个具体项目或经历、追问细节的问题",
       tough: "有压力、刁钻、容易答不好的问题",
-      behavior: "行为面试题（请我讲一个具体例子，比如冲突、失败、带团队）"
+      behavior: "请我讲一个具体例子的问题（比如一次难处理的客户、一次失败、一个关键决定）"
     };
 
     async function transcribeWav(ch, wav) {
@@ -3262,7 +3324,7 @@
           const rec = new Rec();
           rec.continuous = true;
           rec.interimResults = false;
-          rec.lang = $("langSel").value === "zh" ? "zh-CN" : "en-US";
+          rec.lang = recognitionLang();
           rec.onresult = function (ev) {
             for (let i = ev.resultIndex; i < ev.results.length; i++) {
               if (ev.results[i].isFinal) appendPracText(ev.results[i][0].transcript);
@@ -3322,6 +3384,365 @@
     });
 
     // =====================================================================
+    // 15c. Interface language (中文 / English)
+    // UI strings are written in Chinese; in English mode every visible UI text node and
+    // placeholder/title is translated through this table. User content (transcripts,
+    // answers, materials) is never touched.
+    // =====================================================================
+    const I18N = [
+      ["Cue · 实时回答提示", "Cue · Live answer cues"], ["实时回答提示", "Live answer cues"],
+      ["未开始", "Idle"], ["我", "Me"], ["对方", "Them"], ["现场", "Room"], ["安装", "Install"], ["开始", "Start"],
+      ["实时", "Live"], ["准备", "Prep"], ["练习", "Practice"], ["记录", "History"], ["回答", "Answer"], ["对话", "Conversation"],
+      ["纪要", "Notes"], ["复盘", "Review"], ["导出", "Export"], ["专注", "Focus"], ["设置", "Settings"], ["演练", "Rehearse"],
+      ["添加", "Add"], ["更改", "Change"], ["追问", "Follow up"], ["场景", "Scenario"], ["删除", "Delete"], ["返回", "Back"],
+      ["模型", "Model"], ["声音", "Audio"], ["保存", "Save"], ["麦克风", "Microphone"], ["中文", "Chinese"], ["推荐", "Recommended"],
+      ["免费", "Free"], ["编辑", "Edit"], ["已就绪", "Ready"], ["停止", "Stop"], ["展开", "Expand"], ["复制", "Copy"],
+      ["已复制", "Copied"], ["翻译", "Translate"], ["资料", "Materials"], ["页面", "Pages"],
+      ["对话会实时出现在这里", "The conversation will appear here in real time"],
+      ["点「开始」后，对方和你说的话会被自动转写。", "After you press Start, what both sides say is transcribed automatically."],
+      ["点任意一句即可让 AI 回答它。", "Tap any line to have the AI answer it."],
+      ["准备好了就开始", "Start when you're ready"],
+      ["Cue 会听对方说话，在你需要时给出一句可以直接说出口的回答，并引用你自己的资料。", "Cue listens to the other side and, when you need it, gives you a line you can say right away, grounded in your own materials."],
+      ["实时提示", "Live cues"], ["好的回答自动存进资料库，越用越懂你", "good answers are saved to your materials, so Cue keeps getting better"],
+      ["AI 模型", "AI model"],
+      ["未设置 · 填入一个 API Key（Gemini / 硅基流动 / DeepSeek / 智谱），或使用本地 Ollama", "Not set · add an API key (Gemini / SiliconFlow / DeepSeek / Zhipu) or use a local Ollama"],
+      ["我的资料", "My materials"], ["（可选，强烈推荐）", "(optional, strongly recommended)"],
+      ["粘贴产品资料、项目经历或常见问答。回答会引用你的真实经历和数字，而不是瞎编。", "Paste product docs, project notes or FAQs. Answers will use your real facts and numbers instead of making things up."],
+      ["声音来源", "Audio source"], ["线上会议 · 你的麦克风 + 电脑里对方的声音", "Online meeting · your mic + the other side's audio on this computer"],
+      ["测试麦克风", "Test microphone"], ["先看一个示例", "See an example"], ["回答对方刚说的", "answer what they just said"],
+      ["打字提问", "type a question"], ["关闭面板", "close panel"],
+      ["还没有设置 AI 模型，目前只会显示资料库里匹配到的内容。", "No AI model yet, so only matching materials are shown."],
+      ["去设置", "Set up"], ["这场对话里之前的回答", "Earlier answers in this conversation"], ["对方问", "They ask"],
+      ["告诉 Cue 这次是什么场合，放入你的资料。资料越具体，回答越像你本人。", "Tell Cue what the occasion is and add your materials. The more specific they are, the more the answers sound like you."],
+      ["这次是什么场合", "What's the occasion"], ["团队会议", "Team meeting"], ["客户沟通 / 销售", "Client call / sales"],
+      ["演讲后的问答", "Q&A after a talk"], ["技术评审", "Technical review"], ["客服 / 答疑", "Support / office hours"],
+      ["补充背景", "Extra context"], ["只保存在当前页面（导出可备份）", "Only kept in this page (export to back up)"],
+      ["根据资料演练", "Rehearse from my materials"],
+      ["生成对方最可能问的 8 个问题和你的最佳回答；现场被问到时立刻显示", "Generates the 8 questions you're most likely to get, with your best answers; shown instantly when they come up"],
+      ["添加资料", "Add materials"], ["个人 / 项目介绍", "About me / project"], ["问答模板", "FAQ template"], ["对方 / 客户信息", "About them / client"],
+      ["添加到资料库", "Add to materials"], ["上传文件", "Upload file"], ["支持 .txt .md .pdf .csv .json", "Supports .txt .md .pdf .csv .json"],
+      ["严格依据资料回答", "Stick to my materials"], ["涉及经历、数字时只用资料里的内容，不编造", "For facts and numbers, only use what's in my materials; never invent"],
+      ["检索测试", "Search test"], ["导出资料库", "Export materials"], ["导入资料库", "Import materials"], ["清除浏览器里的数据", "Clear data in this browser"],
+      ["Cue 根据你的资料和场景出题，你用语音或打字回答，它会打分并给出更好的说法。", "Cue asks questions based on your materials and scenario. Answer by voice or text, and it scores you and suggests a better answer."],
+      ["常见问题", "Common questions"], ["追问细节", "Detailed follow-ups"], ["刁钻问题", "Tough questions"], ["讲一个具体例子", "Tell a concrete example"],
+      ["朗读题目", "Read aloud"], ["出一道题", "Next question"],
+      ["点「出一道题」开始。没有资料也能练，有资料会更有针对性。", "Press Next question to start. Works without materials; with them, questions are more specific."],
+      ["语音回答", "Answer by voice"], ["正在听…", "Listening…"], ["评估我的回答", "Evaluate my answer"],
+      ["把更好的回答存进资料库", "Save the better answer to materials"], ["练过的题", "Practiced questions"],
+      ["每次停止或清空时，对话和回答会自动存在这里（只保存在这个浏览器里）。", "Each time you stop or clear, the conversation and answers are saved here (only in this browser)."],
+      ["还没有记录。开始一次对话后，停止时会自动保存。", "No history yet. Start a conversation; it's saved automatically when you stop."],
+      ["选择 AI 服务", "Choose an AI service"], ["模型名称", "Model name"], ["未连接", "Not connected"],
+      ["Key 只保存在当前页面的内存里，关闭页面即清除。", "The key is only kept in this page's memory and is cleared when you close it."],
+      ["测试连接", "Test connection"], ["线上会议", "Online meeting"],
+      ["你的麦克风 + 电脑里对方的声音（Zoom / Meet / 腾讯会议）。开始时选择会议所在的标签页或整个屏幕，并打开「分享音频」。", "Your mic + the other side's audio on this computer (Zoom / Meet / Teams). When starting, pick the meeting's tab or the whole screen and turn on “Share audio”."],
+      ["面对面 / 手机", "In person / phone"], ["只用麦克风收现场所有人的声音。手机上只能用这个。", "Use only the microphone to hear everyone in the room. The only option on phones."],
+      ["只听电脑声音", "Computer audio only"], ["只转写电脑里播放的声音，不录你的麦克风。", "Only transcribe audio playing on this computer; your mic is not recorded."],
+      ["系统默认麦克风", "System default microphone"], ["戴耳机开会效果最好：对方的声音不会被麦克风重复收进来。", "Headphones work best: the other side's voice won't be picked up again by your mic."],
+      ["说话的语言", "Spoken language"], ["中英混合（用 Gemini 识别，稍慢）", "Chinese + English mix (Gemini, a bit slower)"],
+      ["极速识别我的麦克风", "Fast recognition for my mic"],
+      ["用浏览器自带的识别，边说边出字，最快；一次只能识别一种语言。电脑声音仍用 Gemini 识别。", "Uses the browser's built-in recognizer: words appear as you speak, fastest, one language at a time. Computer audio still uses Gemini."],
+      ["什么时候自动回答", "When to answer automatically"], ["对方一提问就回答（推荐）", "As soon as they ask a question (recommended)"],
+      ["对方每说完一段都回答（适合问答环节）", "After everything they say (good for Q&A sessions)"], ["不自动，按 Space 或点句子再回答", "Never; press Space or tap a line"],
+      ["语音转写", "Transcription"], ["检测中…", "Checking…"], ["回答语言", "Answer language"], ["英文回答 + 中文提示", "English answer + Chinese hints"],
+      ["回答长度", "Answer length"], ["简短 · 一句话 + 1–2 个要点", "Brief · one line + 1–2 points"], ["标准 · 一句话 + 3 个要点", "Standard · one line + 3 points"],
+      ["详细 · 要点 + 例子", "Detailed · points + an example"], ["提示卡 · 一句开场 + 几个关键词（不用照念，说出来更自然）", "Cue card · an opener + a few keywords (sounds more natural than reading)"],
+      ["实时翻译对方的话", "Live-translate the other side"], ["不翻译", "Off"], ["翻译成中文", "Into Chinese"], ["翻译成英文", "Into English"],
+      ["跨语言沟通时，每句对方的话下面会显示译文。", "For cross-language calls: a translation appears under each line they say."],
+      ["场景和补充背景在「准备」页面里设置。", "Scenario and extra context are on the Prep page."], ["下载离线版", "Download offline version"],
+      ["这个网址不能使用麦克风", "This address can't use the microphone"], ["浏览器只允许", "Browsers only allow"],
+      ["或本地文件调用麦克风和电脑声音。当前地址是", "or local files to use the microphone and computer audio. The current address is"],
+      ["。任选一种方式：", ". Pick one of these:"], ["打开可以用麦克风的新地址（推荐）", "Open the new address that supports the mic (recommended)"],
+      ["打开新地址", "Open new address"], ["下载到本机打开", "Download and open locally"], ["点下面的按钮下载", "Click the button below to download"],
+      ["在你自己的电脑上双击用 Chrome 打开，即可直接使用", "Double-click it on your own computer to open it in Chrome"],
+      ["用 SSH 隧道打开（服务在 Cloudtop 上时用这个）", "Open through an SSH tunnel (when the server runs on a Cloudtop)"],
+      ["在你笔记本的终端运行：", "Run in your laptop's terminal:"], ["你的cloudtop", "your-cloudtop"], ["保持终端开着，在笔记本的 Chrome 打开", "Keep it open, then in Chrome on your laptop open"],
+      ["复制命令", "Copy command"], ["让 Chrome 信任当前网址", "Make Chrome trust this address"], ["新标签页打开", "In a new tab open"],
+      ["把当前网址粘贴进去，选择 Enabled，点 Relaunch 重启浏览器", "Paste this address, choose Enabled, then click Relaunch"], ["复制当前网址", "Copy this address"],
+      ["不想开麦也可以：直接输入对方的问题，或者点「先看一个示例」。", "No mic needed to try it: type their question, or press See an example."],
+      ["知道了", "Got it"], ["麦克风打不开", "Microphone won't open"], ["按顺序检查", "Check in this order"], ["先用打字提问", "Type instead for now"],
+      ["改好了，重试", "Fixed it, retry"], ["安装到电脑或手机主屏幕，像普通 App 一样打开", "Install to your computer or home screen and open it like an app"],
+      ["浮窗：把回答放进置顶小窗，放在摄像头旁边", "Floating window: keep answers in a small always-on-top window next to your camera"],
+      ["设置（模型 / 声音 / 回答）", "Settings (model / audio / answers)"], ["根据目前的对话生成纪要", "Write notes from the conversation so far"],
+      ["复盘：哪里答得好、哪里可以更好，并把改进后的回答存进资料库", "Review: what went well, what to improve, and save improved answers to materials"],
+      ["导出对话与回答为 Markdown", "Export conversation and answers as Markdown"], ["清空对话与回答（会先存到「记录」）", "Clear conversation and answers (saved to History first)"],
+      ["缩小字号", "Smaller text"], ["放大字号", "Larger text"], ["隐藏对话栏，只看回答", "Hide the conversation, show only answers"],
+      ["根据你的资料，提前生成对方最可能问的问题和你的最佳回答", "Generate the questions you're most likely to get and your best answers, from your materials"],
+      ["切换：帮我回答对方的问题 / 私下问 Cue 关于这场对话的问题", "Switch: answer their question for me / ask Cue privately about this conversation"],
+      ["输入对方的问题，回车获取回答", "Type their question and press Enter for an answer"], ["开始收音", "Start listening"], ["停止收音", "Stop listening"],
+      ["私下问 Cue，例如：他们刚才说的预算是多少？", "Ask Cue privately, e.g. what budget did they just mention?"],
+      ["例如：今天和 XX 客户讨论续约；对方是采购负责人；希望语气专业简洁。", "E.g. renewal call with client X today; they're the procurement lead; keep it professional and concise."],
+      ["标题，例如：产品介绍", "Title, e.g. Product overview"], ["直接粘贴内容。", "Paste content directly."],
+      ["小技巧：按「Q: 问题 / A: 答案」的格式写常见问题，命中会更精准。", "Tip: write FAQs as “Q: question / A: answer” for more precise matches."],
+      ["输入一个可能被问到的问题，看看会匹配到哪段资料", "Type a likely question to see which material matches"],
+      ["删除保存在这个浏览器里的资料、设置和记录", "Delete materials, settings and history saved in this browser"],
+      ["点「语音回答」直接说，或者在这里打字", "Press Answer by voice and speak, or type here"], ["关闭 (Esc)", "Close (Esc)"], ["粘贴 API Key", "Paste API key"],
+      ["下载为单个 HTML 文件，在自己电脑上双击打开即可使用", "Download as a single HTML file and double-click it on your computer"],
+      ["一个 Key 同时搞定转写和回答", "One key for both transcription and answers"], ["以 AIza 开头，在 aistudio.google.com 免费获取。", "Starts with AIza; get one free at aistudio.google.com."],
+      ["硅基流动", "SiliconFlow"], ["国内直连 · 免费转写 + DeepSeek-V3", "Direct in mainland China · free transcription + DeepSeek-V3"], ["国内首选", "Best in China"],
+      ["以 sk- 开头，在 cloud.siliconflow.cn 获取。同时提供免费的 SenseVoice 语音转写。", "Starts with sk-; get it at cloud.siliconflow.cn. Includes free SenseVoice transcription."],
+      ["国内直连 · 只负责回答", "Direct in mainland China · answers only"],
+      ["在 platform.deepseek.com 获取。语音转写将使用浏览器识别（仅麦克风）。", "Get it at platform.deepseek.com. Transcription uses the browser recognizer (mic only)."],
+      ["智谱 GLM", "Zhipu GLM"], ["glm-4-flash 永久免费", "glm-4-flash is free"],
+      ["在 open.bigmodel.cn 获取。语音转写将使用浏览器识别（仅麦克风）。", "Get it at open.bigmodel.cn. Transcription uses the browser recognizer (mic only)."],
+      ["通义千问", "Qwen"], ["阿里云百炼", "Alibaba Cloud Bailian"], ["在 bailian.console.aliyun.com 获取 DashScope Key。", "Get a DashScope key at bailian.console.aliyun.com."],
+      ["本地 Ollama", "Local Ollama"], ["完全离线，无需 Key", "Fully offline, no key"],
+      ["面对面 · 麦克风收现场所有人的声音", "In person · mic hears everyone in the room"], ["只听电脑声音 · 不录你的麦克风", "Computer audio only · your mic isn't recorded"],
+      ["自动保存在这个浏览器里", "Saved automatically in this browser"], ["这个浏览器不能保存，请用「导出资料库」备份", "This browser can't save; use Export materials to back up"],
+      ["保存失败，请用「导出资料库」备份", "Save failed; use Export materials to back up"], ["已自动保存到本机", "Saved automatically on this computer"],
+      ["保存失败，可以先导出备份", "Save failed; export a backup for now"], ["没能读取已保存的资料，新内容仍会保存", "Couldn't read saved materials; new content will still be saved"],
+      ["没能从「", "Couldn't read any text from “"], ["」里读出文字。可以把内容复制后直接粘贴进来。", "”. You can copy the content and paste it in instead."],
+      ["已添加「", "Added “"], ["关于我和我的项目", "About me and my project"], ["示例 · 产品问答", "Example · product FAQ"],
+      ["还没有资料。粘贴或上传你的产品资料、项目经历或常见问答。", "No materials yet. Paste or upload product docs, project notes or FAQs."],
+      [" 字 · ", " chars · "], [" 段", " parts"], ["已保存（重新粘贴可替换）", "Saved (paste again to replace)"], ["粘贴 ", "Paste "], [" 的 API Key", " API key"],
+      ["已就绪 · ", "Ready · "], ["模型：", "Model: "], ["。Key 只保存在当前页面的内存里。", ". The key is only kept in this page's memory."],
+      ["没有检测到本机 Ollama（127.0.0.1:11434）。请先运行 ollama serve。", "No local Ollama found (127.0.0.1:11434). Run ollama serve first."],
+      ["硅基流动 SenseVoice（云端，支持麦克风和电脑声音）", "SiliconFlow SenseVoice (cloud; mic and computer audio)"],
+      ["Gemini（云端，支持麦克风和电脑声音）", "Gemini (cloud; mic and computer audio)"], ["本机服务转写（支持麦克风和电脑声音）", "Local server (mic and computer audio)"],
+      ["浏览器内置识别（只能识别麦克风）。要转写电脑里对方的声音，请填 Gemini 或硅基流动的 Key。", "Browser recognizer (mic only). To transcribe the other side's computer audio, add a Gemini or SiliconFlow key."],
+      ["已连接 ", "Connected: "], ["已添加 ", "Added "], [" 份：", " docs: "],
+      ["这个网站不允许网页用麦克风 · 点「开始」查看换哪个地址打开，或先用左下角打字提问", "This site doesn't allow microphone access · press Start to see where to open it, or type a question for now"],
+      ["当前网址不能使用麦克风 · 点「开始」查看解决办法，或先用左下角打字提问", "This address can't use the microphone · press Start for fixes, or type a question for now"],
+      [" · 转写电脑声音需要 Gemini 或硅基流动 Key", " · transcribing computer audio needs a Gemini or SiliconFlow key"],
+      ["正在生成回答…", "Generating answer…"], ["正在听", "Listening"], ["点击让 AI 回答这句", "Click to have the AI answer this"], ["回答这句 →", "Answer this →"],
+      ["这个浏览器无法处理音频流，请用 Chrome 打开（", "This browser can't process the audio stream; please use Chrome ("],
+      ["：请求不被接受（模型名可能不对，可在设置里换一个模型）", ": request rejected (the model name may be wrong; try another model in Settings)"],
+      ["：Key 无效或没有权限，请检查 Key", ": invalid key or no permission; check the key"], ["：这个 Key 用不了当前模型，请在设置里换一个模型", ": this key can't use the current model; pick another in Settings"],
+      ["：请求太频繁或额度用完了，稍等一下再试", ": too many requests or out of quota; try again shortly"], ["：服务暂时不可用（", ": service temporarily unavailable ("],
+      ["），稍后重试", "); try again later"], ["Gemini 转写", "Gemini transcription"], ["硅基流动转写", "SiliconFlow transcription"], ["本机转写 HTTP ", "Local transcription HTTP "],
+      ["正在识别…", "Recognizing…"], ["已经在收电脑声音，但转写它需要 Gemini 或硅基流动的 Key（设置 → 模型）。", "Computer audio is being captured, but transcribing it needs a Gemini or SiliconFlow key (Settings → Model)."],
+      ["转写失败：", "Transcription failed: "], ["这个浏览器不支持内置语音识别，请在设置里填 Gemini 或硅基流动 Key。", "This browser has no built-in speech recognition; add a Gemini or SiliconFlow key in Settings."],
+      ["这个网站不允许网页使用麦克风", "This site doesn't allow microphone access"], ["当前地址（", "The current address ("],
+      ["）把网页放在了安全沙箱里，浏览器会直接拒绝麦克风，跟你电脑的设置无关。换下面任意一种方式打开就可以：", ") puts pages in a security sandbox, so the browser refuses the microphone regardless of your settings. Open it one of these ways instead:"],
+      ["当前网站的权限策略禁止了麦克风。换下面任意一种方式打开就可以：", "This site's permissions policy blocks the microphone. Open it one of these ways instead:"],
+      ["这台设备只能用麦克风收音，已切到「面对面 / 手机」。", "This device can only use the microphone, so it switched to In person / phone."],
+      ["没有收到声音：分享时请选择会议所在的标签页，并打开「分享标签页音频」。", "No audio received: when sharing, pick the meeting's tab and turn on “Share tab audio”."],
+      ["已取消分享电脑声音", "Computer audio sharing cancelled"], ["，只使用麦克风。", "; using the microphone only."],
+      ["开始听了。需要回答时按 Space。", "Listening. Press Space when you want an answer."], ["开始听了。对方说完就会自动出回答，不用按键。", "Listening. Answers appear automatically when they finish speaking."],
+      ["Mac：苹果菜单 → 系统设置 → 隐私与安全性 → 麦克风，打开「Google Chrome」的开关，然后完全退出 Chrome（⌘Q）再重新打开", "Mac: Apple menu → System Settings → Privacy & Security → Microphone, turn on Google Chrome, then fully quit Chrome (⌘Q) and reopen it"],
+      ["Windows：设置 → 隐私和安全性 → 麦克风，打开「允许桌面应用访问麦克风」", "Windows: Settings → Privacy & security → Microphone, turn on “Let desktop apps access your microphone”"],
+      ["在系统设置里允许浏览器使用麦克风", "Allow the browser to use the microphone in system settings"],
+      ["Chrome 地址栏输入 chrome://settings/content/microphone ，确认上方选中了正确的麦克风，并且「不允许」列表里没有 file:/// 开头的条目", "Open chrome://settings/content/microphone, make sure the right microphone is selected and nothing starting with file:/// is in the “Not allowed” list"],
+      ["点地址栏左边的图标 → 网站设置 → 麦克风改成「允许」，然后刷新页面", "Click the icon left of the address bar → Site settings → set Microphone to Allow, then reload"],
+      ["麦克风权限被拒绝了", "Microphone permission was denied"], ["浏览器记住了「不允许」这个页面用麦克风。", "The browser remembered “Don't allow” for this page."],
+      ["浏览器没有弹出权限请求，或者被系统 / 公司策略拦住了。", "The browser didn't ask for permission, or a system / company policy blocked it."],
+      ["如果你用的是公司管理的 Chrome，可能被策略禁止了本地文件使用麦克风：可以换个人 Chrome 账号的窗口或其他浏览器（Edge）试试", "Company-managed Chrome may block local files from using the mic: try a personal Chrome profile or another browser (Edge)"],
+      ["没有找到麦克风", "No microphone found"], ["电脑上没有检测到可用的麦克风（或者之前选的麦克风已经拔掉了）。", "No usable microphone was detected (or the one you picked was unplugged)."],
+      ["插上耳机 / 麦克风，或者在系统声音设置里确认输入设备", "Plug in a headset / mic, or check the input device in system sound settings"],
+      ["设置 → 声音 → 麦克风，选「系统默认麦克风」", "Settings → Audio → Microphone, choose System default microphone"], ["麦克风被别的程序占用了", "Another app is using the microphone"],
+      ["另一个程序正在独占麦克风（常见于 Zoom、Teams、腾讯会议、录音软件）。", "Another app has exclusive use of the mic (often Zoom, Teams, or recording software)."],
+      ["在会议软件里换一个麦克风，或者先退出占用麦克风的程序再重试", "Switch microphones in the meeting app, or quit the app using it and retry"],
+      ["Windows 上可以在会议软件的音频设置里关掉「独占模式」", "On Windows, turn off “exclusive mode” in the app's audio settings"], ["浏览器返回了一个不常见的错误。", "The browser returned an unusual error."],
+      ["用最新版 Chrome 打开这个文件再试", "Open this file in the latest Chrome and try again"], ["建议用 Chrome 打开（其他浏览器对电脑声音的支持不完整）", "Chrome is recommended (other browsers have limited computer-audio support)"],
+      ["技术信息：", "Technical info: "], [" · 权限状态 ", " · permission "], [" · 打开方式 ", " · opened via "], ["其他系统", "other OS"],
+      ["已停止。点左上方「复盘」看看哪里可以答得更好，好的回答会存进资料库。", "Stopped. Press Review to see what could be better; good answers are saved to your materials."],
+      ["还没有可以回答的内容。可以在左下角直接输入对方的问题。", "Nothing to answer yet. You can type their question in the box."],
+      ["没有可用的 AI 模型", "No AI model available"], ["举个例子", "Give an example"], ["更简短", "Shorter"], ["换成英文", "In English"],
+      ["正在整理纪要…", "Writing notes…"], ["正在思考…", "Thinking…"],
+      ["以上是资料库里匹配到的内容。设置 AI 模型后，会把它变成一句可以直接说的话。", "Above is what matched in your materials. With an AI model set up, it becomes a line you can say."],
+      ["设置 AI 模型后，这里会出现可以直接说出口的回答。", "With an AI model set up, a ready-to-say answer appears here."], ["设置 AI 模型", "Set up AI model"],
+      ["把改进后的问答存入资料库", "Save improved Q&A to materials"], ["已存入 ", "Saved "], [" 条", " items"], ["没有找到可存的问答", "No Q&A found to save"],
+      ["没能生成回答：", "Couldn't generate an answer: "], ["已被新的问题打断", "Interrupted by a newer question"], [" 秒出首字 · ", "s to first word · "],
+      ["生成中…", "Generating…"], ["可以检查 Key 或网络后重试", "Check the key or network and retry"], ["模型没有返回内容", "The model returned nothing"],
+      ["问 Cue", "Ask Cue"], ["预演 · 可能被问的问题", "Rehearsal · likely questions"], ["你演练过这道题", "You rehearsed this"], ["你复盘过类似的问题", "You reviewed a similar question"],
+      ["来自你的资料", "From your materials"], ["演练需要先设置 AI 模型。", "Rehearsal needs an AI model first."],
+      ["先在资料库里放点内容（产品资料、项目经历、常见问答），演练才有针对性。", "Add some materials first (product docs, project notes, FAQs) so the rehearsal is specific."],
+      ["根据你的资料，对方最可能问的 8 个问题（已存入资料库，现场被问到时会立刻显示）", "The 8 questions you're most likely to get, from your materials (saved; shown instantly when asked)"],
+      ["演练结果已存入资料库。现场被问到类似问题时会立刻显示。", "Rehearsal saved to materials. Similar questions will show your answer instantly."],
+      ["对话太少，还没法复盘。", "Not enough conversation to review yet."], ["复盘需要先设置 AI 模型。", "Review needs an AI model first."],
+      ["这场对话的复盘", "Review of this conversation"], ["复盘 · ", "Review · "], ["还没有对话内容可以整理。", "No conversation to summarize yet."],
+      ["目前为止的对话纪要", "Notes so far"], ["示例回答（设置 AI 模型后会根据真实对话生成）", "Example answer (real answers once an AI model is set up)"],
+      ["这是示例：上方绿色框是从你的资料里瞬间找到的原话，下方是可以直接说出口的回答。", "Example: the green box is the matching text from your materials, found instantly; below is a line you can say."],
+      ["当前已经是本机文件，可以直接使用。", "This is already a local file; just use it."], ["已下载 Cue.html，在你的电脑上双击用 Chrome 打开即可。", "Downloaded Cue.html. Double-click it on your computer to open in Chrome."],
+      ["这场对话已保存到本机：", "Conversation saved on this computer: "], ["还没有可以导出的内容。", "Nothing to export yet."], ["请先粘贴 API Key。", "Paste an API key first."],
+      ["已保存 ", "Saved "], [" 的 Key。", " key."], ["请先保存 Key（或启动本地 Ollama）。", "Save a key first (or start a local Ollama)."], ["测试中…", "Testing…"],
+      ["连接正常：", "Connected: "], ["连接成功，但模型没有返回内容。", "Connected, but the model returned nothing."], ["连接失败：", "Connection failed: "],
+      ["浏览器不支持浮窗，已切换为专注模式。可以把窗口缩小放在摄像头旁边。", "Floating windows aren't supported here, so Focus mode is on. Shrink the window and put it next to your camera."],
+      ["回答正在浮窗中显示", "Answers are showing in the floating window"], ["网页版：资料和设置保存在这个浏览器里", "Web version: materials and settings are saved in this browser"],
+      ["本地服务：已连接", "Local server: connected"], ["单文件模式：资料和设置保存在这个浏览器里", "Single-file mode: materials and settings are saved in this browser"],
+      ["内容是空的，先粘贴一些文字。", "It's empty; paste some text first."], ["读取失败：", "Read failed: "],
+      ["没有匹配到。可以补充相关内容，或用 Q/A 的格式写这个问题。", "No match. Add related content, or write this question as Q/A."], ["资料库是空的。", "Materials are empty."],
+      ["已导入 ", "Imported "], [" 份资料。", " docs."], ["导入失败：", "Import failed: "], ["请先停止，再切换声音来源。", "Stop first, then change the audio source."],
+      ["这台设备的浏览器不能捕获其他应用的声音，只能用麦克风。", "This device's browser can't capture other apps' audio; microphone only."],
+      ["新的麦克风会在下次开始时生效。", "The new microphone takes effect next time you start."], ["问答环节：已改为对方每说完一段就自动回答。", "Q&A session: now answering after everything they say."],
+      ["无法打开浮窗：", "Couldn't open floating window: "], ["已复制 ", "Copied "], ["已安装。以后可以从桌面、开始菜单或手机主屏幕直接打开 Cue。", "Installed. Open Cue from your desktop, Start menu or home screen."],
+      ["已清除这个浏览器里保存的资料和设置（当前页面里的内容不受影响）。", "Cleared data saved in this browser (what's open in this page is unaffected)."],
+      ["正在测试：请随便说几句话…", "Testing: say a few words…"], ["麦克风正常（", "Microphone works ("], ["）：听到了你的声音。", "): heard your voice."],
+      ["麦克风打开了（", "Microphone opened ("], ["），但几乎没有声音：检查是否静音，或在上面换一个麦克风。", ") but almost no sound: check mute, or pick another microphone above."],
+      ["麦克风打不开，原因见弹窗。", "Microphone won't open; see the dialog for why."], [" 句对话 · ", " lines · "], [" 个回答", " answers"],
+      ["练习需要先设置 AI 模型。", "Practice needs an AI model first."], ["正在出题…", "Writing a question…"], ["出题失败：", "Couldn't create a question: "],
+      ["先点「出一道题」。", "Press Next question first."], ["先回答一下（语音或打字都可以）。", "Answer first (voice or text)."], ["评估需要先设置 AI 模型。", "Evaluation needs an AI model first."],
+      ["正在评估…", "Evaluating…"], ["评估失败：", "Evaluation failed: "], ["得分 ", "Score "], ["已评估", "Evaluated"],
+      ["这个浏览器不支持语音识别：请在设置里填 Gemini Key，或直接打字。", "This browser has no speech recognition: add a Gemini key in Settings, or type."],
+      ["练习 · ", "Practice · "], ["已存进资料库。现场被问到类似问题时会立刻显示。", "Saved to materials. Similar questions will show it instantly."]
+    ];
+    const I18N_EXACT = new Map();
+    const I18N_FRAG = [];
+    I18N.forEach(function (pair) {
+      I18N_EXACT.set(pair[0].trim(), pair[1]);
+      // Short entries are exact-match only, unless they carry spacing (e.g. " 份："), which makes them safe fragments.
+      if (pair[0].trim().length > 2 || pair[0] !== pair[0].trim()) I18N_FRAG.push(pair);
+    });
+    I18N_FRAG.sort(function (a, b) { return b[0].length - a[0].length; });
+    const I18N_PUNCT = [["，", ", "], ["。", ". "], ["：", ": "], ["；", "; "], ["（", " ("], ["）", ")"], ["「", "“"], ["」", "”"], ["、", ", "], ["？", "? "], ["！", "! "]];
+    const CJK_RE = /[\u4e00-\u9fff]/;
+
+    function tr(str) {
+      if (S.uiLang !== "en" || !str || !CJK_RE.test(str)) return str;
+      const lead = str.match(/^\s*/)[0], tail = str.match(/\s*$/)[0], core = str.trim();
+      let out = I18N_EXACT.get(core);
+      if (out === undefined) {
+        out = core;
+        I18N_FRAG.forEach(function (p) { if (out.indexOf(p[0]) !== -1) out = out.split(p[0]).join(p[1]); });
+        I18N_PUNCT.forEach(function (p) { out = out.split(p[0]).join(p[1]); });
+        out = out.replace(/\s{2,}/g, " ").replace(/\s+([,.;:?!)])/g, "$1").trim();
+      }
+      return lead + out + tail;
+    }
+
+    const I18N_SKIP = ".utt-text, .utt-tr, .q-text, .kb-snip, .lead:not(.placeholder), .points, .raw, .doc-name, .sess-body, " +
+      ".prac-q:not(.placeholder), .kb-test-out, .hist-a, .u, textarea, script, style";
+    const I18N_ATTRS = ["placeholder", "title", "aria-label"];
+    const origText = new WeakMap();
+
+    function localizeText(node) {
+      const parent = node.parentElement;
+      if (!parent || parent.closest(I18N_SKIP)) return;
+      const cur = node.nodeValue;
+      if (S.uiLang === "en") {
+        if (!CJK_RE.test(cur)) return;
+        const t = tr(cur);
+        if (t !== cur) { origText.set(node, cur); node.nodeValue = t; }
+      } else if (origText.has(node)) {
+        const o = origText.get(node);
+        origText.delete(node);
+        if (node.nodeValue !== o) node.nodeValue = o;
+      }
+    }
+
+    function localizeAttrs(elm) {
+      if (elm.closest("textarea, script, style, .u")) return;
+      I18N_ATTRS.forEach(function (a) {
+        if (!elm.hasAttribute(a)) return;
+        const key = "data-zh-" + a;
+        const cur = elm.getAttribute(a);
+        if (S.uiLang === "en") {
+          if (!CJK_RE.test(cur)) return;
+          const t = tr(cur);
+          if (t !== cur) { elm.setAttribute(key, cur); elm.setAttribute(a, t); }
+        } else if (elm.hasAttribute(key)) {
+          elm.setAttribute(a, elm.getAttribute(key));
+          elm.removeAttribute(key);
+        }
+      });
+    }
+
+    function localizeTree(root) {
+      if (!root) return;
+      if (root.nodeType === 3) { localizeText(root); return; }
+      if (root.nodeType !== 1) return;
+      localizeAttrs(root);
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+      let n;
+      while ((n = walker.nextNode())) {
+        if (n.nodeType === 3) localizeText(n); else localizeAttrs(n);
+      }
+    }
+
+    const i18nObserver = new MutationObserver(function (records) {
+      records.forEach(function (r) {
+        if (r.type === "characterData") localizeText(r.target);
+        else if (r.type === "attributes") localizeAttrs(r.target);
+        else r.addedNodes.forEach(localizeTree);
+      });
+      i18nObserver.takeRecords();   // ignore the changes we just made ourselves
+    });
+
+    function setUiLang(lang, fromSettings) {
+      S.uiLang = lang === "en" ? "en" : "zh";
+      document.documentElement.lang = S.uiLang === "en" ? "en" : "zh-CN";
+      document.title = S.uiLang === "en" ? "Cue · Live answer cues" : "Cue · 实时回答提示";
+      $("btnLang").textContent = S.uiLang === "en" ? "中文" : "EN";
+      localizeTree(document.body);
+      i18nObserver.takeRecords();
+      renderProviders();
+      renderDocs();
+      renderReady();
+      refreshStatus();
+      renderHistory();
+      if (S.current) mountAnswer(S.current);
+      if (!fromSettings) persistKb();
+    }
+
+    function initUiLang() {
+      S.uiLang = /^zh/i.test(navigator.language || "") ? "zh" : "en";
+      if (S.uiLang === "en") {
+        $("langSel").value = "en";
+        $("spokenLang").value = "en";
+      }
+      i18nObserver.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: I18N_ATTRS });
+      setUiLang(S.uiLang, true);
+    }
+
+    $("btnLang").addEventListener("click", function () { setUiLang(S.uiLang === "en" ? "zh" : "en"); });
+
+    // ---- Recognition helpers ----
+    function spokenHint() {
+      const v = $("spokenLang").value;
+      if (v === "en") return " (mostly English)";
+      if (v === "zh") return " (mostly Chinese, may include English words)";
+      return " (English, Chinese, or a mix)";
+    }
+    function recognitionLang() { return $("spokenLang").value === "en" ? "en-US" : "zh-CN"; }
+    function fastMicUsable() {
+      return Boolean((window.SpeechRecognition || window.webkitSpeechRecognition) &&
+        $("chkFastMic").checked && $("spokenLang").value !== "mix");
+    }
+
+    // ---- Live translation of the other side ----
+    function scheduleTranslate(u) {
+      if (!u || u.ch === "mic") return;
+      const mode = $("translateSel").value;
+      if (mode === "off" || !aiReady()) return;
+      clearTimeout(u.trTimer);
+      u.trTimer = setTimeout(function () { translateUtt(u, mode); }, 450);
+    }
+    async function translateUtt(u, mode) {
+      const hasCjk = CJK_RE.test(u.text);
+      if (mode === "zh" && hasCjk && !/[A-Za-z]{4,}/.test(u.text)) return;   // already Chinese
+      if (mode === "en" && !hasCjk) return;                                    // already English
+      if (u.trAbort) { try { u.trAbort.abort(); } catch (_) {} }
+      const ctl = new AbortController();
+      u.trAbort = ctl;
+      if (!u.trEl) { u.trEl = el("div", { class: "utt-tr" }); u.el.appendChild(u.trEl); }
+      let out = "";
+      try {
+        await streamAnswer("Translate the user's text into " + (mode === "zh" ? "Simplified Chinese" : "English") +
+          ". Use the target language's natural punctuation and number formats. Output only the translation, nothing else.", u.text, ctl.signal, function (d) { out += d; u.trEl.textContent = out.trim(); });
+      } catch (_) { /* translation is best effort */ }
+    }
+
+    // ---- Composer: answer for me / ask Cue privately ----
+    S.askMode = false;
+    $("composerMode").addEventListener("click", function () {
+      S.askMode = !S.askMode;
+      $("composerMode").textContent = S.askMode ? "问 Cue" : "对方问";
+      $("composerMode").classList.toggle("on", S.askMode);
+      $("composerInput").setAttribute("placeholder", S.askMode ? "私下问 Cue，例如：他们刚才说的预算是多少？" : "输入对方的问题，回车获取回答");
+      $("composerInput").focus();
+    });
+    function askCue(q) {
+      const transcript = S.utts.slice(-120).map(function (u) { return whoLabel(u.ch) + ": " + u.text; }).join("\n");
+      const mats = materialsDigest(3000);
+      answer(q, {
+        kind: "ask",
+        displayQuestion: q,
+        system: "You are my private assistant during a live conversation. Answer my question concisely using the transcript and my materials. " +
+          "If the answer is not there, say so. Plain text only, no Markdown; use \"• \" for lists. Reply in " + ($("langSel").value === "zh" ? "Chinese" : "English") + ".",
+        user: (mats ? "[My materials]\n" + mats + "\n\n" : "") + "[Transcript]\n" + (transcript || "(nothing yet)") + "\n\n[My question]\n" + q
+      });
+    }
+
+    // =====================================================================
     // 16. Boot
     // =====================================================================
     applyDeviceLimits();
@@ -3332,6 +3753,7 @@
     renderDocs();
     renderReady();
     refreshStatus();
+    initUiLang();
     refreshMicDevices();
     probe();
     setInterval(probe, 8000);

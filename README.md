@@ -1,14 +1,56 @@
-# Cue · 实时回答提示
+# Cue
 
-一个纯网页应用：听对方说话，实时给出可以直接说出口的回答，并引用你自己的资料。
-所有内容都在浏览器里运行，没有服务器；API Key 只保存在页面内存里，资料和记录保存在你自己的浏览器里。
+**Live answer cues for conversations.** Cue listens to a conversation, transcribes both sides in real time, and when someone asks you something it shows a line you can say right away, plus a few supporting points, grounded in your own materials.
 
-## 部署到 GitHub Pages
-1. 新建一个仓库，把这个文件夹里的所有文件（`index.html`、`manifest.webmanifest`、`sw.js`、`icon.svg`、`.nojekyll`）放到仓库根目录。
-2. 仓库 Settings → Pages → Source 选 `Deploy from a branch`，分支选 `main`、目录选 `/ (root)`，保存。
-3. 一两分钟后打开 `https://<你的用户名>.github.io/<仓库名>/`。
+It's a single web page: no server, no build step. Everything runs in your browser.
 
-## 使用
-- 设置 → 模型：粘贴 Gemini API Key（https://aistudio.google.com/apikey）。
-- 电脑上的 Chrome 可以同时收你的麦克风和会议里对方的声音；手机只能用麦克风。
-- 地址栏或页面右上角可以「安装」，之后像普通 App 一样从桌面 / 主屏幕打开。
+## Use cases
+
+- **Client and sales calls**: pricing, timelines, "how are you different from X?" Your product facts are on screen the moment the question lands.
+- **Team meetings and reviews**: quick, accurate answers about your project's numbers and decisions.
+- **Q&A after a talk or demo**: rehearse the likely questions beforehand; your prepared answer appears instantly when one comes up.
+- **Support and office hours**: clear, step-by-step answers from your FAQ.
+- **Cross-language calls**: live translation of the other side (Chinese ⇄ English) under every line.
+
+## Features
+
+- **Live transcription of both sides**: your microphone plus the other side's audio from a meeting tab (Chrome on desktop). On phones, the microphone hears everyone in the room.
+- **Automatic answers**: when the other side asks a question, an answer starts streaming within about a second. No hotkey needed (Space also works).
+- **Your materials, not made-up facts**: paste product docs, project notes or FAQs. Matching passages appear instantly, and the AI is told to use only your facts and numbers.
+- **Prep → Practice → Live → Review**
+  - *Prep*: generate the 8 questions you're most likely to get and your best answers.
+  - *Practice*: Cue asks questions by voice; you answer by voice or text; it scores you and suggests a better answer.
+  - *Live*: answers, follow-ups (expand / example / shorter / in English), cue-card mode, and points you've already covered get crossed out.
+  - *Review*: what went well, what to improve, and improved answers saved back to your materials.
+- **Ask Cue**: privately ask about the conversation ("what budget did they mention?").
+- **Interface in English or Chinese**, with a separate setting for the answer language.
+- **History**: every session is saved in your browser and can be exported as Markdown.
+- **Installable** (PWA) on desktop and phone, with an always-on-top floating window on desktop Chrome.
+
+## Getting started
+
+1. Open the page in **Chrome** (desktop or Android) or Safari on iOS.
+2. **Settings → Model**: choose a provider and paste an API key. Gemini is recommended; get a key at <https://aistudio.google.com/apikey>.
+3. **Settings → Audio → Test microphone** to check permission and input level.
+4. Optional: **Prep** → add your materials.
+5. Press **Start**. In an online meeting, choose the meeting's tab and turn on *Share tab audio*.
+
+## Speech recognition
+
+| Channel | Engine | Notes |
+|---|---|---|
+| Your microphone | Browser speech recognition (*Fast recognition*, on by default) | Words appear as you speak; one language at a time (set *Spoken language*). |
+| Your microphone, mixed languages | Gemini (`gemini-3.5-flash-lite`) | Handles Chinese, English and mixed speech; about 1.2–1.5 s per phrase. |
+| The other side (meeting audio) | Gemini | Audio is split at natural pauses (or every ~2 s), and phrases are transcribed in parallel. |
+
+## Privacy
+
+- API keys live only in the page's memory and are never stored or sent anywhere except the provider you chose.
+- Materials, settings and history are stored in your browser (IndexedDB). *Prep → Clear data in this browser* removes them.
+- Audio is sent only to the transcription provider you configured.
+
+## Deploying (GitHub Pages)
+
+Put `index.html`, `manifest.webmanifest`, `sw.js`, `icon.svg` and `.nojekyll` in the repository root, then go to **Settings → Pages**, choose **Deploy from a branch**, select `main` and `/ (root)`, and save.
+
+Microphone access requires HTTPS (GitHub Pages provides it) or `localhost`.
