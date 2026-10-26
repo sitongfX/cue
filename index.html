@@ -689,17 +689,17 @@
     </nav>
     <div class="drawer-body">
       <div class="panel" data-panel="model">
-        <div class="field">
-          <span class="label">选择 AI 服务</span>
-          <div class="options" id="providerList"></div>
-        </div>
         <div class="field" id="keyField">
           <span class="label">API Key</span>
           <div class="row">
-            <input class="input" id="keyInput" type="password" placeholder="粘贴 API Key" autocomplete="off" />
+            <input class="input" id="keyInput" type="password" placeholder="粘贴任意 API Key，自动识别是哪家服务" autocomplete="off" />
             <button class="btn btn-primary" id="btnSaveKey" type="button">保存</button>
           </div>
-          <span class="help" id="keyHelp"></span>
+          <span class="help" id="keyHelp">支持 Gemini、硅基流动、DeepSeek、智谱、通义千问，粘贴后自动识别。</span>
+        </div>
+        <div class="field">
+          <span class="label">AI 服务 <span class="help">（自动识别，也可以手动选）</span></span>
+          <div class="options" id="providerList"></div>
         </div>
         <div class="field">
           <span class="label">模型名称</span>
@@ -1392,9 +1392,11 @@
         ));
       });
       const p = PROVIDERS[S.provider];
-      $("keyField").hidden = Boolean(p.noKey);
-      $("keyHelp").textContent = p.keyHelp;
-      $("keyInput").placeholder = S.keys[S.provider] ? "已保存（重新粘贴可替换）" : "粘贴 " + p.name + " 的 API Key";
+      if (!S.detecting) {
+        $("keyHelp").textContent = S.keys[S.provider]
+          ? "当前使用：" + p.name + "（" + maskKey(S.keys[S.provider]) + "）。粘贴新的 Key 会自动识别并切换。"
+          : "支持 Gemini、硅基流动、DeepSeek、智谱、通义千问，粘贴后自动识别。";
+      }
       if (document.activeElement !== $("modelInput")) $("modelInput").value = S.model;
       const ready = aiReady();
       $("aiStatusTitle").textContent = ready ? ("已就绪 · " + p.name) : "未连接";
@@ -2739,11 +2741,65 @@
       setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
     }
 
-    function saveKey() {
-      const val = $("keyInput").value.trim();
+    function maskKey(k) { return k.length > 10 ? k.slice(0, 4) + "…" + k.slice(-4) : "…"; }
+
+    // Candidate providers from the key's shape, most likely first.
+    function keyCandidates(k) {
+      if (/^(AIza[0-9A-Za-z_-]{20,}|AQ\.[0-9A-Za-z_.-]{20,})$/.test(k)) return ["gemini"];
+      if (/^[0-9a-f]{32}\.[0-9A-Za-z]{8,}$/i.test(k)) return ["zhipu"];
+      if (/^sk-[a-z]{40,}$/.test(k)) return ["siliconflow", "deepseek", "qwen"];
+      if (/^sk-[0-9a-f]{32}$/i.test(k)) return ["deepseek", "qwen", "siliconflow"];
+      if (/^sk-/.test(k)) return ["siliconflow", "deepseek", "qwen"];
+      return ["gemini", "siliconflow", "deepseek", "zhipu", "qwen"];
+    }
+
+    // Sends a 1-token request; resolves true only if the provider accepts this key.
+    async function keyWorksFor(provider, k) {
+      const sig = timeoutSignal(8000);
+      try {
+        if (provider === "gemini") {
+          const r = await fetch(cloudUrl("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1"),
+            { headers: { "x-goog-api-key": k }, signal: sig });
+          return r.ok;
+        }
+        const r = await fetch(cloudUrl(PROVIDERS[provider].url), {
+          method: "POST", signal: sig,
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + k },
+          body: JSON.stringify({ model: PROVIDERS[provider].model, max_tokens: 1, messages: [{ role: "user", content: "hi" }] })
+        });
+        return r.ok;
+      } catch (_) { return false; }
+    }
+
+    // Returns { id, verified }: tries every candidate in parallel and takes the first that accepts the key.
+    async function detectProvider(k) {
+      const cands = keyCandidates(k);
+      const winner = await new Promise(function (resolve) {
+        let left = cands.length;
+        cands.forEach(function (c) {
+          keyWorksFor(c, k).then(function (ok) {
+            if (ok) resolve(c);
+            if (--left === 0) resolve(null);
+          });
+        });
+      });
+      return winner ? { id: winner, verified: true } : { id: cands[0], verified: false };
+    }
+
+    async function saveKey() {
+      const val = $("keyInput").value.trim().replace(/^Bearer\s+/i, "");
       if (!val) { toast("请先粘贴 API Key。"); return; }
-      let p = S.provider;
-      if (/^(AIza|AQ\.)/.test(val) && p !== "gemini") { p = "gemini"; S.provider = p; S.model = PROVIDERS.gemini.model; }
+      S.detecting = true;
+      $("btnSaveKey").disabled = true;
+      $("keyHelp").textContent = "正在识别这个 Key 属于哪家服务…";
+      let det;
+      try { det = await detectProvider(val); } finally {
+        S.detecting = false;
+        $("btnSaveKey").disabled = false;
+      }
+      const p = det.id;
+      if (S.provider !== p || !/^gemini/.test(S.model) === (p === "gemini")) S.model = PROVIDERS[p].model;
+      S.provider = p;
       S.keys[p] = val;
       $("keyInput").value = "";
       warmedAt = 0;
@@ -2755,7 +2811,10 @@
       }
       renderProviders();
       renderReady();
-      toast("已保存 " + PROVIDERS[p].name + " 的 Key。");
+      persistKb();
+      toast(det.verified
+        ? "已识别为 " + PROVIDERS[p].name + "，Key 可以用。"
+        : "没能验证这个 Key（可能无效，或网络不通）。按格式先当作 " + PROVIDERS[p].name + "，不对的话请在下面手动选择。", det.verified ? 3800 : 7000);
     }
 
     async function testAi() {
@@ -3895,6 +3954,14 @@
       ["正在评估…", "Evaluating…"], ["评估失败：", "Evaluation failed: "], ["得分 ", "Score "], ["已评估", "Evaluated"],
       ["这个浏览器不支持语音识别：请在设置里填 Gemini Key，或直接打字。", "This browser has no speech recognition: add a Gemini key in Settings, or type."],
       ["练习 · ", "Practice · "],
+      ["粘贴任意 API Key，自动识别是哪家服务", "Paste any API key; the service is detected automatically"],
+      ["支持 Gemini、硅基流动、DeepSeek、智谱、通义千问，粘贴后自动识别。", "Works with Gemini, SiliconFlow, DeepSeek, Zhipu and Qwen; detected automatically."],
+      ["AI 服务", "AI service"], ["（自动识别，也可以手动选）", "(detected automatically, or pick one)"],
+      ["当前使用：", "Using: "], ["。粘贴新的 Key 会自动识别并切换。", ". Paste a new key to detect and switch automatically."],
+      ["正在识别这个 Key 属于哪家服务…", "Detecting which service this key belongs to…"],
+      ["已识别为 ", "Detected: "], ["，Key 可以用。", "; the key works."],
+      ["没能验证这个 Key（可能无效，或网络不通）。按格式先当作 ", "Couldn't verify this key (it may be invalid, or the network is blocked). Treating it as "],
+      ["，不对的话请在下面手动选择。", " based on its format; pick another service below if that's wrong."],
       ["流式识别（最快）", "Streaming recognition (fastest)"],
       ["用 Gemini Live 边听边转写：对方停顿约 1 秒就出字，中英文自动识别。需要 Gemini Key。", "Gemini Live transcribes while people talk: text appears about 1 s after they pause, Chinese and English detected automatically. Needs a Gemini key."],
       ["说话时实时提示补充", "Live coaching while I speak"],

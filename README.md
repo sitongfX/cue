@@ -32,7 +32,7 @@ It's a single web page: no server, no build step. Everything runs in your browse
 ## Getting started
 
 1. Open the page in **Chrome** (desktop or Android) or Safari on iOS.
-2. **Settings → Model**: choose a provider and paste an API key. Gemini is recommended; get a key at <https://aistudio.google.com/apikey>.
+2. **Settings → Model**: paste any API key. Cue detects the provider automatically (Gemini, SiliconFlow, DeepSeek, Zhipu or Qwen) by its format and by checking which service accepts it. Gemini is recommended; get a key at <https://aistudio.google.com/apikey>.
 3. **Settings → Audio → Test microphone** to check permission and input level.
 4. Optional: **Prep** → add your materials.
 5. Press **Start**. In an online meeting, choose the meeting's tab and turn on *Share tab audio*.
