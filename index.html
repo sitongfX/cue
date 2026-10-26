@@ -2738,7 +2738,10 @@
           return "[" + (i + 1) + "] (" + h.doc + ")\n" + h.text;
         }).join("\n\n"));
       }
-      const recent = S.utts.slice(-8).map(function (u) { return whoEn(u.ch) + ": " + u.text; }).join("\n");
+      // Shorter prompt = faster first words: cap each line, skip the question itself if it's the last line.
+      let ru = S.utts.slice(-8);
+      if (ru.length && sameText(ru[ru.length - 1].text, question)) ru = ru.slice(0, -1);
+      const recent = ru.map(function (u) { const t = u.text.length > 320 ? "…" + u.text.slice(-320) : u.text; return whoEn(u.ch) + ": " + t; }).join("\n");
       if (recent) parts.push("[Recent conversation]\n" + recent);
       parts.push("[Answer this now]\n" + question);
       if (extra) parts.push(extra);
