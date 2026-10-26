@@ -206,6 +206,8 @@
     .learn-bar > span { display: block; height: 100%; background: var(--accent); }
     .coach-rescue b { color: var(--me); font-weight: 600; }
     .script { margin-top: 12px; padding-left: 14px; border-left: 2px solid var(--line-2); font-size: calc(17px * var(--scale)); line-height: 1.75; color: var(--text); }
+    .utt.prov .utt-text { opacity: .72; }
+    .seg button.has-new::after { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-left: 6px; vertical-align: 2px; }
     .utt .who { cursor: pointer; border-radius: 6px; padding: 0 4px; margin-left: -4px; }
     .utt .who:hover { background: var(--raised); }
     .utt.relabeled .who { animation: rise .3s ease-out; }
@@ -447,6 +449,7 @@
       body:not([data-view="live"]) .composer-wrap, body:not([data-view="live"]) .fab { display: none; }
 
       .ready h1 { font-size: 23px; }
+      .toast { bottom: calc(var(--tabbar) + var(--safe-b) + 84px); }
       .btn-xl { width: 100%; justify-content: center; }
       .step .step-key { flex-wrap: nowrap !important; flex-direction: row !important; }
       #stepAi .step-actions { display: none; }
@@ -823,6 +826,7 @@
             <p class="sub">每次停止或清空时，对话和回答会自动存在这里（只保存在这个浏览器里）。</p>
           </div>
           <div class="card" id="sessListCard">
+            <input class="input" id="sessSearch" type="search" placeholder="搜索记录：问题、对方说的话、逐字稿…" style="margin-bottom: 10px;" />
             <div class="history" id="sessionList"></div>
             <div class="doc-empty" id="sessEmpty">还没有记录。开始一次对话后，停止时会自动保存。</div>
           </div>
@@ -1266,6 +1270,7 @@
     };
 
     const S = {
+      convGen: 0,
       provider: "gemini",
       model: PROVIDERS.gemini.model,
       keys: { gemini: "", siliconflow: "", deepseek: "", zhipu: "", qwen: "" },
@@ -1635,6 +1640,13 @@
     // =====================================================================
     // 4. Rendering: docs, providers, ready checklist, status
     // =====================================================================
+    function docLabel(name) {
+      if (S.uiLang !== "en") return name;
+      if (name === "我说过的回答") return "My past answers";
+      if (name === "预演 · 可能被问的问题") return "Rehearsal · likely questions";
+      if (name.indexOf("复盘 · ") === 0) return "Review · " + name.slice(5);
+      return name;
+    }
     function renderDocs() {
       const list = $("docList");
       list.replaceChildren();
@@ -1646,7 +1658,7 @@
       S.docs.forEach(function (d) {
         const pieces = S.chunks.filter(function (c) { return c.doc === d.name; }).length;
         list.appendChild(el("div", { class: "doc" },
-          el("span", { class: "doc-name", text: d.name, title: d.name }),
+          el("span", { class: "doc-name", text: docLabel(d.name), title: d.name }),
           el("span", { class: "doc-meta", text: d.text.length + " 字 · " + pieces + " 段" }),
           el("button", { class: "btn btn-ghost", type: "button", text: "编辑", onclick: function () {
             $("docTitle").value = d.name;
@@ -1836,7 +1848,8 @@
       });
     }
 
-    function addUtterance(ch, rawText) {
+    function addUtterance(ch, rawText, opts) {
+      opts = opts || {};
       if (ch === "room" && S.spk) ch = "mic";
       const text = (rawText || "").replace(/\s+/g, " ").trim();
       // Mic-only: a statement that echoes the answer on screen is you answering, not a new turn from them.
@@ -1846,24 +1859,31 @@
         if (classifyVoice(Math.max(VOICE.lastFinal, nowP - 8000), nowP) === "me") ch = "mic";
         VOICE.lastFinal = nowP;
       }
-      if (ch === "mic") hudMine(text, true); else hudReset();
       const prev = S.utts[S.utts.length - 1];
-      const joinable = prev && Date.now() - prev.at < (ch === "room" ? 2500 : 4000) && prev.text.length < 600;
+      const joinable = prev && !prev.prov && !opts.prov && Date.now() - prev.at < (ch === "room" ? 1200 : 4000) && prev.text.length < 600;
       if (!text || (text.length < 2 && !(joinable && prev.ch === ch))) return null;
       if (HALLUCINATIONS.some(function (h) { return text.indexOf(h) !== -1; })) return null;
       if (isEcho(ch, text)) return null;
-      // Mic-only mode can't tell voices apart: statements right after an answer are treated as you answering.
-      if (ch === "mic" || (ch === "room" && !looksLikeQuestion(text))) { markCoveredPoints(text); scheduleCoach(); }
+      const freshAnswer = Boolean(S.current && S.current.kind === "answer" && Date.now() - S.current.id < 90000);
+      const roomQ = ch === "room" && isQuestion(text);
+      // Coaching follows your words (in mic-only mode: statements while an answer is on screen).
+      if (ch === "mic" || (ch === "room" && !roomQ && freshAnswer)) { markCoveredPoints(text); scheduleCoach(); hudMine(text, true); }
+      if (ch === "mic" && S.current && S.current.kind === "answer") S.current.mine = ((S.current.mine || "") + " " + text).slice(-1500);
+      else if (ch === "spk" || roomQ) hudReset();
       noteTalk(ch, text);
       const now = Date.now();
 
       $("convoEmpty").hidden = true;
       const last = S.utts[S.utts.length - 1];
       let u;
-      // Same speaker continuing: append. With separate channels (mic / meeting audio) the speaker is known,
-      // so slow speech with pauses stays in one block; in mic-only mode a sentence end starts a new block.
-      if (last && last.ch === ch && !last.locked && last.text.length < 600 &&
-          (ch === "room" ? (now - last.at < 2500 && !/[。！？!?.]$/.test(last.text)) : now - last.at < 4000)) {
+      // Same speaker continuing: append. With separate channels the speaker is known, so slow speech with
+      // pauses stays in one block. In mic-only mode blocks stay short so each can be labelled on its own.
+      const canMerge = last && last.ch === ch && !last.locked && !last.prov && !opts.prov && last.text.length < 600 &&
+        (ch === "room"
+          ? (now - last.at < 1200 && !/[。！？!?.]$/.test(last.text) && !isQuestion(last.text) &&
+             !(last.el && last.el.classList.contains("answered")) && !(S.current && last.at < S.current.id))
+          : now - last.at < 4000);
+      if (canMerge) {
         last.text = last.text + (/[a-z0-9]$/i.test(last.text) ? " " : "") + text;
         last.at = now;
         last.textEl.textContent = last.text;
@@ -1872,48 +1892,62 @@
         u = { id: S.nextId++, ch: ch, text: text, at: now };
         u.textEl = el("div", { class: "utt-text", text: text });
         u.t0 = now;
-        u.el = el("div", { class: "utt " + whoClass(ch), title: "点击让 AI 回答这句",
+        u.el = el("div", { class: "utt " + whoClass(ch) + (opts.prov ? " prov" : ""), title: "点击让 AI 回答这句",
           onclick: function () { if (u.ch !== "mic") learnQ(u.text, 1); answer(u.text, { utt: u }); } },
           el("div", { class: "utt-meta" },
             el("span", { class: "who", title: "点一下切换：我 / 对方", text: whoLabel(ch), onclick: function (ev) { ev.stopPropagation(); flipSpeaker(u); } }),
             el("span", { text: fmtClock(new Date(now)) }),
             el("span", { class: "utt-act", text: "回答这句 →" })),
           u.textEl);
+        if (opts.prov) u.prov = true;
         S.utts.push(u);
         $("convo").insertBefore(u.el, $("interim"));
       }
       const convo = $("convo");
       convo.scrollTop = convo.scrollHeight;
       scheduleTranslate(u);
+      updateTalk();
       if (u.ch === "room") scheduleRoles();
 
       if (ch !== "mic" && SPEC.timer) { clearTimeout(SPEC.timer); SPEC.timer = null; }
       if (ch !== "mic") S.lastFinalAt = now;
-      if (ch !== "mic" && S.autoMode !== "off") {
+      if (ch !== "mic" && S.autoMode !== "off" && S.listening) {
         if (S.autoTimer) clearTimeout(S.autoTimer);
-        const turn = latestTheirTurn();
-        const isQ = isQuestion(turn);
-        // Questions: answer almost immediately (and refine if they keep talking).
-        // "Every turn" mode: also answer statements once they pause for a moment.
-        const delay = isQ ? 60 : (S.autoMode === "turn" && turn.length >= 8 ? 1100 : -1);
+        const q0 = ch === "room" ? u.text : latestTheirTurn();
+        const isQ = isQuestion(q0);
+        if (ch === "room" && !isQ) return u;   // "every turn" mode needs to know who's talking
+        // Mic-only while you're answering: a question is probably yours. Wait for the speaker label first.
+        if (ch === "room" && freshAnswer && S.current.talking && $("chkRoles").checked && aiReady()) {
+          u.pendingAuto = true;
+          scheduleRoles();
+          return u;
+        }
+        // Questions: answer almost immediately. "Every turn" mode: also answer statements after a short pause.
+        const delay = isQ ? 60 : (S.autoMode === "turn" && q0.length >= 8 ? 1100 : -1);
         if (delay >= 0) {
-          S.autoTimer = setTimeout(function () {
-            if (S.pending > 0 && delay > 200) return;
-            if (S.current && S.current.status === "streaming" && S.current.kind !== "answer") return;
-            const q = latestTheirTurn();
-            const cur = S.current;
-            if (q && cur && cur.spec && cur.status !== "error" && cur.status !== "aborted" && sameQuestion(q, cur.question)) {
-              confirmSpec(cur, q);   // the early draft already answers this; keep it
-              return;
-            }
-            if (q && q !== S.lastAutoQ) {
-              S.lastAutoQ = q;
-              answer(q, { auto: true });
-            }
-          }, delay);
+          const trig = u;
+          S.autoTimer = setTimeout(function () { autoAnswer(trig, delay); }, delay);
         }
       }
       return u;
+    }
+
+    function autoAnswer(trig, delay) {
+      if (!S.listening) return;
+      if (S.pending > 0 && delay > 200) return;
+      if (S.current && S.current.status === "streaming" && S.current.kind !== "answer") return;
+      const q = trig.ch === "room" || trig.ch === "spk" && !S.spk ? trig.text : latestTheirTurn();
+      const cur = S.current;
+      if (q && cur && cur.spec && cur.status !== "error" && cur.status !== "aborted" && sameQuestion(q, cur.question)) {
+        confirmSpec(cur, q);   // the early draft already answers this; keep it
+        return;
+      }
+      if (q && cur && cur.kind === "answer" && (cur.auto || (S.manualAt && Date.now() - S.manualAt < 6000)) &&
+          cur.status !== "error" && sameQuestion(q, cur.question)) return;   // already answering this
+      if (q && q !== S.lastAutoQ) {
+        S.lastAutoQ = q;
+        answer(q, { auto: true, trigger: trig });
+      }
     }
 
     function looksLikeYouAnswering(text) {
@@ -2348,6 +2382,7 @@
       $("statsCard").hidden = true;
       $("transcriptCard").hidden = true;
       SPEC.sHit = 0; SPEC.sMiss = 0;
+      if (S.current && S.current.kind !== "answer") { S.current = null; mountAnswer(null); renderHistory(); }
       S.listening = true;
       S.startedAt = Date.now();
       warmUp();
@@ -2425,42 +2460,62 @@
 
     function stopListening() {
       S.listening = false;
+      if (S.autoTimer) { clearTimeout(S.autoTimer); S.autoTimer = null; }
+      if (SPEC.timer) { clearTimeout(SPEC.timer); SPEC.timer = null; }
       const rec = S.recog;
       S.recog = null;
-      if (rec) { try { rec.stop(); } catch (_) {} }
+      if (rec) { try { rec.stop(); } catch (_) {} }   // its onend keeps words still pending
       stopTrackRecognition();
-      if (S.mic) S.mic.stop();
-      if (S.spk) S.spk.stop();
+      const caps = [S.mic, S.spk].filter(Boolean);
       S.mic = null; S.spk = null;
+      const finishing = caps.map(function (c) {
+        if (c.finish) return c.finish();   // streaming: ask for the last words, then close
+        try { c.flush(); } catch (_) {}
+        c.stop();
+        return Promise.resolve();
+      });
       stopExtPlayback();
-      S.liveInterim = {};
       if (S.timerHandle) clearInterval(S.timerHandle);
-      if (S.current) commitMemory(S.current);
-      flushContributions();
       hudReset();
-      showStats();
-      recStopAll().then(function () { if ($("chkRecord").checked && REC.parts.length && aiReady()) setTimeout(fullTranscript, 1500); });
-      if (S.utts.length >= 4 && $("chkRecap").checked && aiReady()) setTimeout(function () { recap(true); }, 400);
-      else if (S.utts.length >= 4) toast("已停止。点「跟进」生成摘要和跟进邮件，点「复盘」看看哪里可以答得更好。", 6000);
-      archiveSession();
-      saveSessionLocal();
       releaseWakeLock();
       showInterim("");
       refreshStatus();
+      const gen = S.convGen;
+      Promise.all(finishing).then(function () {
+        // Label any lines still marked "room" before the stats are computed.
+        clearTimeout(ROLES.timer);
+        return ($("chkRoles").checked && !S.spk && aiReady() && S.utts.some(function (u) { return u.ch === "room"; })) ? runRoles() : null;
+      }).then(function () {
+        S.liveInterim = {};
+        showInterim("");
+        if (gen !== S.convGen) return;
+        if (S.current) commitMemory(S.current);
+        flushContributions();
+        showStats();
+        recStopAll().then(function () {
+          if (gen === S.convGen && $("chkRecord").checked && REC.parts.some(function (p) { return !p.done; }) && (S.keys.gemini || S.keys.cue)) {
+            S.txTimer = setTimeout(fullTranscript, 1500);
+          }
+        });
+        if (S.utts.length >= 4 && $("chkRecap").checked && aiReady()) S.recapTimer = setTimeout(function () { if (gen === S.convGen) recap(true); }, 400);
+        else if (S.utts.length >= 4) toast("已停止。点「跟进」生成摘要和跟进邮件，点「复盘」看看哪里可以答得更好。", 6000);
+        archiveSession();
+        saveSessionLocal();
+      });
     }
 
     async function answerLatest() {
-      ["spk", "room"].forEach(function (c) {
-        if (S.liveInterim[c]) { addUtterance(c, S.liveInterim[c]); S.liveInterim[c] = ""; showInterim(""); }
-      });
+      const extra = ["spk", "room"].map(function (c) { return (S.liveInterim[c] || "").trim(); }).filter(Boolean).join(" ");
       if (S.mic) S.mic.flush();
       if (S.spk) S.spk.flush();
       const t0 = Date.now();
       await sleep(60);
       while (S.pending > 0 && Date.now() - t0 < 3000) await sleep(80);
-      const q = latestTheirTurn();
+      let q = latestTheirTurn();
+      if (extra) q = S.spk ? (q + " " + extra).trim() : lastSentence(extra) || extra;
       if (!q) { toast("还没有可以回答的内容。可以在左下角直接输入对方的问题。"); $("composerInput").focus(); return; }
       if (!isQuestion(q)) learnQ(q, 1);   // Cue missed this one: learn from it
+      S.manualAt = Date.now();
       answer(q);
     }
 
@@ -2898,8 +2953,13 @@
       if (S.abort) { try { S.abort.abort(); } catch (_) {} }
       if (S.current) commitMemory(S.current);
       $("ready").hidden = true;
-      if (document.body.dataset.view !== "live") showView("live");
-      setPane("stage");
+      if (!opts.auto) {
+        if (document.body.dataset.view !== "live") showView("live");
+        setPane("stage");
+      } else if (document.body.dataset.pane === "convo") {
+        const segBtn = document.querySelector('#liveSeg [data-pane="stage"]');
+        if (segBtn) segBtn.classList.add("has-new");
+      }
       if (opts.auto && navigator.vibrate) { try { navigator.vibrate(30); } catch (_) {} }
       // The other side kept talking: replace the earlier draft instead of piling up history.
       if (opts.auto && S.current && S.current.auto && (S.current.spec || q.indexOf(S.current.question) === 0)) {
@@ -2914,6 +2974,7 @@
         kind: opts.kind || "answer",
         auto: Boolean(opts.auto),
         spec: Boolean(opts.spec),
+        triggerUtt: opts.trigger || opts.utt || null,
         followLabel: opts.followLabel || "",
         hits: opts.presetHits || (opts.kind && opts.kind !== "answer" ? [] : smartRetrieve(q + (opts.base ? " " + opts.base.question : ""), 2)),
         subqs: opts.kind && opts.kind !== "answer" ? [] : splitQuestions(opts.displayQuestion || q),
@@ -3027,16 +3088,21 @@
       answer("会后复盘", {
         kind: "review",
         displayQuestion: "这场对话的复盘",
-        system: "你是我的沟通教练，帮我复盘刚才的对话。只看「我」实际说了什么，对比对方的问题，给出具体、可执行的建议。严格使用以下格式：" +
+        system: (S.uiLang === "en" || $("langSel").value === "en")
+          ? "You are my communication coach. Review the conversation we just had: look only at what \"Me\" actually said versus the other side's questions, and give concrete, actionable advice. Write in English. Use exactly this format:" +
+            "\n[One-line summary]\n…\n\n[What they cared about]\n• …\n\n[What I did well]\n• …\n\n[What could be better]\n• issue → better wording: \"…\"\n\n[Next steps]\n• …\n\n[Save to materials]\nQ: a question they asked\nA: the improved best answer (first person, spoken, 2-3 sentences)\n(one Q/A per key question, blank line between them)"
+          : "你是我的沟通教练，帮我复盘刚才的对话。只看「我」实际说了什么，对比对方的问题，给出具体、可执行的建议。严格使用以下格式：" +
           "\n【一句话总结】\n…\n\n【对方关心的问题】\n• …\n\n【我答得好的地方】\n• …\n\n【可以更好的地方】\n• 问题 → 更好的说法：「…」\n\n【下一步】\n• …\n\n【存入资料库】\nQ: 对方问过的问题\nA: 改进后的最佳回答（第一人称口语，2-3 句）\n（每个关键问题一组 Q/A，问题之间空一行）",
         user: (mats ? "【我的资料】\n" + mats + "\n\n" : "") + "【对话记录】\n" + transcript
       });
     }
 
     function saveReviewToKb(a) {
-      const idx = a.text.indexOf("【存入资料库】");
+      let mark = "【存入资料库】";
+      let idx = a.text.indexOf(mark);
+      if (idx === -1) { mark = "[Save to materials]"; idx = a.text.indexOf(mark); }
       if (idx === -1) return 0;
-      const qa = a.text.slice(idx + "【存入资料库】".length).trim();
+      const qa = a.text.slice(idx + mark.length).trim();
       const n = (qa.match(/^Q[:：]/gm) || []).length;
       if (!n) return 0;
       addDoc("复盘 · " + new Date().toLocaleString(), qa);
@@ -3170,10 +3236,12 @@
     }
 
     function buildMarkdown() {
-      const lines = ["# 对话记录 · " + new Date().toLocaleString(), "", "## 对话"];
-      S.utts.forEach(function (u) { lines.push("- **" + whoLabel(u.ch) + "** (" + fmtClock(new Date(u.at)) + ")：" + u.text); });
-      if (S.fullTranscript) lines.push("", "## 完整逐字稿", S.fullTranscript);
-      lines.push("", "## 回答");
+      const en = S.uiLang === "en";
+      const L = function (ch) { return en ? (ch === "spk" ? "Them" : (ch === "room" ? "Room" : "Me")) : whoLabel(ch); };
+      const lines = [(en ? "# Conversation · " : "# 对话记录 · ") + new Date().toLocaleString(), "", en ? "## Conversation" : "## 对话"];
+      S.utts.forEach(function (u) { lines.push("- **" + L(u.ch) + "** (" + fmtClock(new Date(u.at)) + ")" + (en ? ": " : "：") + u.text); });
+      if (S.fullTranscript) lines.push("", en ? "## Complete transcript" : "## 完整逐字稿", S.fullTranscript);
+      lines.push("", en ? "## Answers" : "## 回答");
       S.answers.forEach(function (a) {
         if (!a.text) return;
         lines.push("### " + a.question, RAW_KINDS[a.kind] ? a.text : answerPlainText(a), "");
@@ -3324,6 +3392,9 @@
       const placeholder = el("div", { class: "stage", style: "display:grid;place-items:center;color:var(--muted);" }, "回答正在浮窗中显示");
       stage.replaceWith(placeholder);
       pip.document.body.appendChild(stage);
+      pip.document.documentElement.lang = document.documentElement.lang;
+      localizeTree(stage);
+      i18nObserver.observe(pip.document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: I18N_ATTRS });
       pipDoc = pip.document;
       pip.document.addEventListener("keydown", onKeyDown);
       pip.addEventListener("pagehide", function () {
@@ -3336,6 +3407,9 @@
       const target = ev.target;
       const typing = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.tagName === "BUTTON" || target.isContentEditable);
       if (ev.key === "Escape") { closeDrawer(); return; }
+      if (ev.code === "Space" && target && target.tagName === "BUTTON" && !target.closest("dialog, .drawer") && !ev.metaKey && !ev.ctrlKey && !ev.altKey) {
+        ev.preventDefault(); target.blur(); answerLatest(); return;
+      }
       if (typing || ev.metaKey || ev.ctrlKey || ev.altKey) return;
       if ($("insecureDialog").open || $("micDialog").open || $("drawer").classList.contains("open")) return;
       if (ev.code === "Space") { ev.preventDefault(); answerLatest(); return; }
@@ -3386,7 +3460,9 @@
     // 15. Event wiring
     // =====================================================================
     $("btnStart").addEventListener("click", function () { if (S.listening) stopListening(); else startListening(); });
-    $("btnReadyStart").addEventListener("click", startListening);
+    $("btnReadyStart").addEventListener("click", function () { this.blur(); startListening(); });
+    $("btnStart").addEventListener("click", function () { this.blur(); });
+    $("btnFab").addEventListener("click", function () { this.blur(); });
     $("btnDemo").addEventListener("click", runDemo);
     $("btnSettings").addEventListener("click", function () { openDrawer(); });
     $("btnCloseDrawer").addEventListener("click", closeDrawer);
@@ -3602,6 +3678,7 @@
 
     function setPane(p) {
       document.body.dataset.pane = p;
+      if (p === "stage") { const b = document.querySelector('#liveSeg [data-pane="stage"]'); if (b) b.classList.remove("has-new"); }
       document.querySelectorAll("#liveSeg button").forEach(function (b) { b.classList.toggle("active", b.dataset.pane === p); });
     }
 
@@ -3731,7 +3808,7 @@
       const rec = {
         id: S.sessId || (S.sessId = Date.now()),
         at: new Date().toLocaleString(),
-        title: firstQ.text.slice(0, 80),
+        title: (S.sessTitle || firstQ.text).slice(0, 80),
         turns: S.utts.length,
         answers: S.answers.filter(function (a) { return a.text; }).length,
         metrics: S.lastMetrics || null,
@@ -3747,7 +3824,9 @@
 
     let openSession = null;
     async function renderSessions() {
-      const list = await loadSessions();
+      const all = await loadSessions();
+      const needle = ($("sessSearch").value || "").trim().toLowerCase();
+      const list = needle ? all.filter(function (r) { return ((r.title || "") + "\n" + (r.markdown || "") + "\n" + (r.transcript || "")).toLowerCase().indexOf(needle) !== -1; }) : all;
       const box = $("sessionList");
       box.replaceChildren();
       $("sessEmpty").hidden = list.length > 0;
@@ -3767,6 +3846,8 @@
       $("sessViewCard").hidden = false;
     }
     $("btnSessBack").addEventListener("click", renderSessions);
+    let sessSearchTimer = null;
+    $("sessSearch").addEventListener("input", function () { clearTimeout(sessSearchTimer); sessSearchTimer = setTimeout(renderSessions, 200); });
     $("btnSessExport").addEventListener("click", function () {
       if (openSession) downloadText(openSession.markdown, "cue-" + openSession.id + ".md", "text/markdown");
     });
@@ -3782,7 +3863,7 @@
     });
 
     // ---- Practice: AI asks, you answer by voice or text, AI scores and rewrites ----
-    const P = { q: "", asked: [], rec: null, chain: null, abort: null, better: "" };
+    const P = { q: "", asked: [], rec: null, chain: null, abort: null, better: "", queue: [], queueTotal: 0 };
     const PRAC_TYPES = {
       common: "最常见、最可能被问到的问题",
       deep: "针对我资料里某个具体项目或经历、追问细节的问题",
@@ -3814,7 +3895,7 @@
     }
 
     async function pracNext() {
-      if (!aiReady()) { toast("练习需要先设置 AI 模型。"); openDrawer("model"); return; }
+      if (!aiReady() && !P.queue.length) { toast("练习需要先设置 AI 模型。"); openDrawer("model"); return; }
       stopPracRecording();
       if (window.speechSynthesis) speechSynthesis.cancel();
       const scen = $("scenarioSel").options[$("scenarioSel").selectedIndex].textContent;
@@ -3826,6 +3907,20 @@
       $("pracFeedback").textContent = "";
       $("btnPracSave").hidden = true;
       const qEl = $("pracQ");
+      if (P.queue.length) {   // questions from your real conversation come first
+        P.q = P.queue.shift();
+        qEl.classList.remove("placeholder");
+        qEl.textContent = P.q;
+        P.asked.push(P.q);
+        toast((S.uiLang === "en" ? "From your last conversation · " : "来自刚才的对话 · ") + (P.queueTotal - P.queue.length) + " / " + P.queueTotal, 2500);
+        if ($("pracSpeak").checked && window.speechSynthesis) {
+          const su = new SpeechSynthesisUtterance(P.q);
+          su.lang = /[\u4e00-\u9fff]/.test(P.q) ? "zh-CN" : "en-US";
+          su.rate = 1.05;
+          speechSynthesis.speak(su);
+        }
+        return;
+      }
       qEl.classList.add("placeholder");
       qEl.textContent = "正在出题…";
       pracBusy(true);
@@ -3850,6 +3945,22 @@
       } finally {
         pracBusy(false);
       }
+    }
+
+    function theirQuestions() {
+      const out = [];
+      S.utts.forEach(function (u) {
+        if (u.ch === "mic" || !isQuestion(u.text)) return;
+        const t = u.text.trim();
+        if (!out.some(function (x) { return sameQuestion(x, t); })) out.push(t);
+      });
+      return out.slice(-10);
+    }
+    function practiseQuestions(list) {
+      P.queue = list.slice();
+      P.queueTotal = list.length;
+      showView("practice");
+      pracNext();
     }
 
     async function pracFeedback() {
@@ -4019,6 +4130,8 @@
       let ws = null, ready = false, stopped = false, everReady = false, retries = 0;
       let pending = [], pendingLen = 0;
       const queue = [];
+      const prov = { utts: [], committed: 0, start: 0 };
+      let finishWaiter = null;
 
       function send(b64) {
         const msg = JSON.stringify({ realtimeInput: { audio: { data: b64, mimeType: "audio/pcm;rate=16000" } } });
@@ -4070,12 +4183,15 @@
           const sc = m.serverContent;
           if (!sc) return;
           const fin = sc.inputTranscription && sc.inputTranscription.text;
-          const mid = (sc.interimInputTranscription || sc.undecidedInputTranscription || {}).text;
+          const m1 = (sc.interimInputTranscription || {}).text || "", m2 = (sc.undecidedInputTranscription || {}).text || "";
+          const mid = m2.length > m1.length ? m2 : m1;
           if (fin) {
             S.liveInterim[ch] = "";
             showInterim("");
-            addUtterance(ch, tidyTranscript(fin));
+            commitFinal(ch, tidyTranscript(fin), prov);
+            if (finishWaiter) finishWaiter();
           } else if (mid) {
+            provisional(ch, mid, prov);
             S.liveInterim[ch] = mid;
             showInterim(interimPrefix(ch) + mid);
             if (ch !== "spk" && !looksLikeQuestion(mid)) markCoveredPoints(mid, true);
@@ -4149,8 +4265,24 @@
         teardown(true);
         if (onEnded) onEnded();
       }
+      // Stop gracefully: tell Gemini the audio ended and wait briefly for the last words.
+      function finish() {
+        return new Promise(function (resolve) {
+          if (stopped) { resolve(); return; }
+          let timer = null;
+          const done = function () { finishWaiter = null; clearTimeout(timer); stop(); resolve(); };
+          finishWaiter = done;
+          timer = setTimeout(function () {
+            const pend = (S.liveInterim[ch] || "").trim();
+            if (pend) { S.liveInterim[ch] = ""; commitFinal(ch, tidyTranscript(pend), prov); }
+            done();
+          }, 1800);
+          try { if (ws && ws.readyState === 1 && ready) ws.send(JSON.stringify({ realtimeInput: { audioStreamEnd: true } })); } catch (_) {}
+          if (!(S.liveInterim[ch] || "").trim()) done();
+        });
+      }
       stream.getTracks().forEach(function (t) { t.addEventListener("ended", stop); });
-      return { stop: stop, flush: function () {}, live: true };
+      return { stop: stop, flush: function () {}, finish: finish, live: true };
     }
 
     function startTrackRecognition(ch, track) {
@@ -4256,7 +4388,6 @@
     function noteTalk(ch, text) {
       const n = text.replace(/\s+/g, "").length;
       if (ch === "mic") {
-        TALK.me += n;
         TALK.run += n;
         const f = (text.match(FILLER_RE) || []).length;
         if (f) {
@@ -4271,7 +4402,6 @@
           toast(S.uiLang === "en" ? "You've been talking for a while. Consider pausing to ask what they think." : "你已经连续说了一段时间，可以停下来问问对方的想法。", 5000);
         }
       } else if (ch === "spk") {
-        TALK.them += n;
         TALK.run = 0;
         TALK.nudged = false;
       }
@@ -4281,6 +4411,12 @@
     function updateTalk() {
       const box = $("talkRatio");
       if (!box) return;
+      let meN = 0, themN = 0;
+      S.utts.forEach(function (x) {
+        const n = x.text.replace(/\s+/g, "").length;
+        if (x.ch === "mic") meN += n; else if (x.ch === "spk") themN += n;
+      });
+      TALK.me = meN; TALK.them = themN;
       const total = TALK.me + TALK.them;
       if (!total || !TALK.them) { box.textContent = TALK.fill ? (S.uiLang === "en" ? "fillers " + TALK.fill : "口头禅 " + TALK.fill) : ""; return; }
       const me = Math.round(TALK.me * 100 / total);
@@ -4343,7 +4479,7 @@
     });
 
     // ---- Early drafts: start answering while the other side is still finishing the question ----
-    const SPEC = { timer: null, embLen: 0, sHit: 0, sMiss: 0 };
+    const SPEC = { timer: null, embLen: 0, sHit: 0, sMiss: 0, heard: "" };
     function normQ(t) { return (t || "").toLowerCase().replace(/[\s.,!?;:，。！？；：、"'“”‘’…-]+/g, ""); }
     function sameQuestion(a, b) {
       const x = normQ(a), y = normQ(b);
@@ -4369,17 +4505,24 @@
       }
     }
     function maybeSpeculate(ch, mid) {
+      if (ch === "mic" || (ch === "room" && S.spk) || S.autoMode === "off" || !S.listening || !$("chkSpec").checked || !aiReady()) {
+        if (SPEC.timer) { clearTimeout(SPEC.timer); SPEC.timer = null; }
+        return;
+      }
+      const freshAnswer = S.current && S.current.kind === "answer" && Date.now() - S.current.id < 90000;
+      if (ch === "room" && freshAnswer) return;   // probably you answering; wait for the final line
+      const heard = (ch === "room" ? lastSentence(mid) : (mid || "")).trim();
+      if (heard === SPEC.heard && SPEC.timer) return;   // same words re-sent: keep the pending timer
       if (SPEC.timer) { clearTimeout(SPEC.timer); SPEC.timer = null; }
-      if (ch === "mic" || (ch === "room" && S.spk) || S.autoMode === "off" || !S.listening || !$("chkSpec").checked || !aiReady()) return;
-      const heard = (mid || "").trim();
+      SPEC.heard = heard;
       if (heard.length < 6) return;
       if (isQuestion(heard) && Math.abs(heard.length - SPEC.embLen) >= 6) { SPEC.embLen = heard.length; semEmbedQuery(heard).catch(function () {}); }
       SPEC.timer = setTimeout(function () {
         SPEC.timer = null;
-        if ((S.liveInterim[ch] || "").trim() !== heard) return;   // they're still talking
+        if (!S.listening || SPEC.heard !== heard) return;   // they're still talking
         if (!isQuestion(heard)) return;
         const last = S.utts[S.utts.length - 1];
-        const q = ((last && last.ch !== "mic" ? latestTheirTurn() + " " : "") + heard).trim();
+        const q = ch === "room" ? heard : ((last && last.ch !== "mic" ? latestTheirTurn() + " " : "") + heard).trim();
         const cur = S.current;
         if (cur && cur.status === "streaming" && cur.kind !== "answer") return;
         if (cur && cur.auto && sameQuestion(q, cur.question)) return;   // already on it
@@ -4387,26 +4530,68 @@
       }, specDelay());
     }
 
+    function splitSentences(t) {
+      return String(t || "").replace(/([。！？；!?]|\.(?=\s|$))\s*/g, "$1\u0001").split("\u0001")
+        .map(function (x) { return x.trim(); }).filter(Boolean);
+    }
+    function lastSentence(t) { const p = splitSentences(t); return p.length ? p[p.length - 1] : ""; }
+    function removeUtt(u) {
+      S.utts = S.utts.filter(function (x) { return x !== u; });
+      if (u.el) u.el.remove();
+    }
+    // Long turns: the streaming recognizer only sends the final text when the speaker pauses. Show finished
+    // sentences as provisional lines after a few seconds, then replace them with the final text.
+    function provisional(ch, mid, prov) {
+      if (!S.listening) return;
+      if (!prov.start) prov.start = Date.now();
+      if (Date.now() - prov.start < 4000) return;
+      const parts = splitSentences(mid);
+      const done = /[。！？；!?.]\s*$/.test(mid) ? parts : parts.slice(0, -1);
+      for (let i = prov.committed; i < done.length; i++) {
+        const u = addUtterance(ch, done[i], { prov: true });
+        if (u) prov.utts.push(u);
+      }
+      if (done.length > prov.committed) prov.committed = done.length;
+    }
+    function commitFinal(ch, text, prov) {
+      prov.utts.forEach(removeUtt);
+      prov.utts = []; prov.committed = 0; prov.start = 0;
+      const pieces = (ch === "room" || (ch === "mic" && !S.spk)) ? splitSentences(text) : [text];
+      pieces.forEach(function (p) { addUtterance(ch, p); });
+    }
+
     // ---- Follow-up recap: summary, their questions, commitments, and an email draft ----
     function recapEmail(text) {
-      const i = (text || "").indexOf("【跟进邮件】");
-      return i === -1 ? "" : text.slice(i + "【跟进邮件】".length).trim();
+      const t = text || "";
+      const marks = ["【跟进邮件】", "[Follow-up email]"];
+      for (let k = 0; k < marks.length; k++) {
+        const i = t.indexOf(marks[k]);
+        if (i !== -1) return t.slice(i + marks[k].length).trim();
+      }
+      return "";
     }
     function recap(auto) {
       if (S.utts.length < 2) { toast("对话太少，还没法生成跟进。"); return; }
       if (!aiReady()) { toast("生成跟进需要先设置 AI 模型。"); openDrawer("model"); return; }
       const transcript = S.utts.slice(-120).map(function (u) { return whoLabel(u.ch) + "：" + u.text; }).join("\n");
       const bg = $("bgInput").value.trim();
-      const langRule = $("langSel").value === "en"
-        ? "Write everything in English, but keep the 【】 section headers exactly as given."
+      const enRecap = S.uiLang === "en" || $("langSel").value === "en";
+      const langRule = enRecap
+        ? "Write everything in English."
         : "用对话的主要语言写内容（中文对话用中文，英文对话用英文），但 【】 小标题保持原样。";
       answer("通话跟进", {
         kind: "recap",
         displayQuestion: auto ? "这场对话的跟进（停止收音后自动生成）" : "这场对话的跟进",
         system: "你是我的助理，根据刚才的对话记录整理会后跟进。只写对话里真实出现的内容，不要编造数字、日期或承诺。" + langRule +
-          "\n严格使用以下格式：\n【一句话总结】\n…\n\n【对方关心的问题】\n• …\n\n【约定的事项】\n• 谁 · 做什么 · 什么时候（没说时间就写「待定」）\n\n【跟进邮件】\n主题：…\n\n正文：简短、礼貌、可以直接发送；先感谢，再回顾要点，列出下一步，最后一句收尾。",
+          (enRecap
+            ? "\nUse exactly this format:\n[One-line summary]\n…\n\n[Their questions]\n• …\n\n[Commitments]\n• who · what · when (write \"TBD\" if no time was said)\n\n[Follow-up email]\nSubject: …\n\nBody: short, polite, ready to send; thank them, recap the key points, list next steps, close in one line."
+            : "\n严格使用以下格式：\n【一句话总结】\n…\n\n【对方关心的问题】\n• …\n\n【约定的事项】\n• 谁 · 做什么 · 什么时候（没说时间就写「待定」）\n\n【跟进邮件】\n主题：…\n\n正文：简短、礼貌、可以直接发送；先感谢，再回顾要点，列出下一步，最后一句收尾。"),
         user: (bg ? "【背景】\n" + bg + "\n\n" : "") + "【对话记录】\n" + transcript,
-        onDone: function () { saveSessionLocal(); if (auto) toast("跟进已生成并存进「记录」，可以直接复制邮件。", 5000); }
+        onDone: function (a) {
+          const m = (a.text || "").match(/(?:【一句话总结】|\[One-line summary\])\s*\n?\s*([^\n]+)/);
+          if (m) S.sessTitle = m[1].trim();
+          lastSavedSig = "";
+          saveSessionLocal(); if (auto) toast("跟进已生成并存进「记录」，可以直接复制邮件。", 5000); }
       });
     }
 
@@ -4877,7 +5062,7 @@
     const MEMORY_DOC = "我说过的回答";
     function commitMemory(a) {
       if (!a || a.memSaved || a.kind !== "answer" || !$("chkMemory").checked) return;
-      const said = (a.spoken || "").replace(/\s+/g, " ").trim();
+      const said = (a.mine || "").replace(/\s+/g, " ").trim();
       if (said.replace(/\s/g, "").length < 24) return;
       a.memSaved = true;
       const q = a.question.replace(/\s+/g, " ").trim().slice(0, 240);
@@ -4936,7 +5121,7 @@
         return el("div", { class: "stat-d " + (better ? "up" : "down"), text: (d > 0 ? "↑ " : "↓ ") + (Math.round(Math.abs(d) * 10) / 10) + unit + (en ? " vs last" : " 比上次") });
       };
       const tile = function (v, label, d) { return el("div", { class: "stat" }, el("div", { class: "stat-v u", text: v }), el("div", { class: "stat-l", text: label }), d); };
-      box.appendChild(el("div", { class: "stats-title" }, en ? "This conversation" : "本场表现", el("span", { text: en ? "Saved to History" : "已存进「记录」" })));
+      box.appendChild(el("div", { class: "stats-title" }, en ? "This conversation" : "本场表现", el("span", { text: S.utts.length >= 2 ? (en ? "Saved to History" : "已存进「记录」") : "" })));
       const grid = el("div", { class: "stats-grid" });
       grid.appendChild(tile(String(m.answers), en ? "answers" : "次回答", el("div", { class: "stat-d" })));
       grid.appendChild(tile(fmtSpeed(m.speed), en ? "after they finished" : "对方说完到出字", delta(m.speed, prev && prev.speed, true, en ? " s" : " 秒")));
@@ -4952,6 +5137,12 @@
       else if (m.coverage !== null && m.coverage < 50) tip = en ? "Next time: glance at the highlighted Next point before you finish." : "下次试试：收尾前看一眼高亮的「下一点」，把要点说全。";
       else if (m.answers) tip = en ? "Nice. Your answers were saved to memory, so similar questions will be instant next time." : "不错。你的回答已存进资料库，下次被问到类似问题会直接显示你的说法。";
       if (tip) box.appendChild(el("div", { class: "stats-tip", text: tip }));
+      const asked = theirQuestions();
+      if (asked.length) {
+        box.appendChild(el("div", { class: "row", style: "margin-top: 12px;" },
+          el("button", { class: "btn", type: "button", text: (en ? "Practise the " + asked.length + " questions they asked" : "练习这场被问到的 " + asked.length + " 个问题"),
+            onclick: function () { practiseQuestions(asked); } })));
+      }
       box.hidden = false;
       saveSessionLocal();
     }
@@ -5178,16 +5369,24 @@
     // =====================================================================
     function setUttCh(u, ch, manual) {
       if (!u || u.ch === ch) return;
-      if (u.ch === "mic" && ch !== "mic") { TALK.me = Math.max(0, TALK.me - u.text.length); TALK.them += u.text.length; }
-      else if (u.ch !== "mic" && ch === "mic") { TALK.them = Math.max(0, TALK.them - u.text.length); TALK.me += u.text.length; }
       u.ch = ch;
       if (manual) u.locked = true;
+      if (ch === "mic" && S.current && S.current.kind === "answer" && (u.t0 || u.at) >= S.current.id) S.current.mine = ((S.current.mine || "") + " " + u.text).slice(-1500);
       if (u.el) {
         u.el.className = "utt " + whoClass(ch) + (u.el.classList.contains("answered") ? " answered" : "") + " relabeled";
         const w = u.el.querySelector(".who");
         if (w) w.textContent = whoLabel(ch);
       }
       updateTalk();
+      // The line that triggered the answer on screen was actually mine: take the answer back.
+      const cur = S.current;
+      if (ch === "mic" && cur && cur.auto && cur.kind === "answer" && cur.triggerUtt === u && !cur.talking) {
+        if (S.abort) { try { S.abort.abort(); } catch (_) {} }
+        S.answers = S.answers.filter(function (x) { return x !== cur; });
+        S.current = null;
+        mountAnswer(null); renderHistory(); refreshStatus();
+        if (u.el) u.el.classList.remove("answered");
+      }
     }
     function flipSpeaker(u) {
       const toMe = u.ch !== "mic";
@@ -5204,6 +5403,7 @@
     }
     async function runRoles() {
       if (ROLES.busy) { scheduleRoles(); return; }
+      const gen = S.convGen;
       const recent = S.utts.slice(-10);
       if (!recent.some(function (u) { return u.ch === "room" && !u.locked; })) return;
       ROLES.busy = true;
@@ -5221,6 +5421,7 @@
           new AbortController().signal, function (d) { out += d; });
         const m = out.match(/\{[\s\S]*\}/);
         const labels = m ? (JSON.parse(m[0]).labels || []) : [];
+        if (gen !== S.convGen) { ROLES.busy = false; return; }
         if (labels.length === recent.length) {
           recent.forEach(function (u, i) {
             if (u.locked || (u.ch !== "room" && !u.autoRole)) return;
@@ -5230,12 +5431,19 @@
         }
       } catch (_) { /* labels stay as they are */ }
       ROLES.busy = false;
+      if (gen !== S.convGen) return;
+      // Questions held back while you were answering: answer them now if they came from the other side.
+      recent.forEach(function (u) {
+        if (!u.pendingAuto) return;
+        u.pendingAuto = false;
+        if (S.listening && u.ch !== "mic" && S.utts.indexOf(u) !== -1) { S.lastAutoQ = u.text; answer(u.text, { auto: true, trigger: u }); }
+      });
     }
 
     // ---- Recording (memory only) → complete transcript after the call ----
     const REC = { parts: [], live: {} };
     function recStart(ch, stream) {
-      if (!$("chkRecord").checked || !window.MediaRecorder || REC.live[ch]) return;
+      if (!$("chkRecord").checked || !(S.keys.gemini || S.keys.cue) || !window.MediaRecorder || REC.live[ch]) return;
       const mime = ["audio/webm;codecs=opus", "audio/ogg;codecs=opus", "audio/mp4"].find(function (m) { return MediaRecorder.isTypeSupported(m); }) || "";
       const astream = new MediaStream(stream.getAudioTracks());
       const st = { stopped: false, rec: null, timer: null };
@@ -5247,7 +5455,8 @@
         const chunks = [], t0 = Date.now();
         rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
         rec.onstop = function () {
-          if (chunks.length) REC.parts.push({ ch: ch, blob: new Blob(chunks, { type: rec.mimeType || mime || "audio/webm" }), t0: t0, t1: Date.now() });
+          if (chunks.length && !st.discard) REC.parts.push({ ch: ch, blob: new Blob(chunks, { type: rec.mimeType || mime || "audio/webm" }), t0: t0, t1: Date.now() });
+          st.discard = false;
           if (!st.stopped && astream.getAudioTracks().some(function (t) { return t.readyState === "live"; })) begin();
           else {
             if (REC.live[ch] === st) delete REC.live[ch];
@@ -5260,6 +5469,15 @@
         st.timer = setTimeout(function () { try { rec.stop(); } catch (_) {} }, 5 * 60 * 1000);
       };
       begin();
+    }
+    // New conversation while listening: drop the current piece and start fresh files.
+    function recRestart() {
+      Object.keys(REC.live).forEach(function (ch) {
+        const st = REC.live[ch];
+        st.discard = true;
+        clearTimeout(st.timer);
+        try { if (st.rec && st.rec.state !== "inactive") st.rec.stop(); } catch (_) {}
+      });
     }
     function recStopAll() {
       const list = Object.keys(REC.live).map(function (ch) {
@@ -5300,24 +5518,29 @@
       }
       throw new Error(S.uiLang === "en" ? "Needs a Gemini key or Cue Cloud" : "需要 Gemini Key 或 Cue 云端");
     }
+    function fmtT(ms) { const sec = Math.round(ms / 1000); return String(Math.floor(sec / 60)).padStart(2, "0") + ":" + String(sec % 60).padStart(2, "0"); }
+    function txLabel(w, en) { return w === "ME" ? (en ? "Me" : "我") : (w === "OTHER" ? (en ? "Them" : "对方") : ""); }
     async function fullTranscript() {
-      const parts = REC.parts.slice().sort(function (a, b) { return a.t0 - b.t0; });
+      const parts = REC.parts.filter(function (p) { return !p.done; }).sort(function (a, b) { return a.t0 - b.t0; });
       if (!parts.length) return;
+      const gen = S.convGen, sid = S.sessId;
+      if (!S.txOrigin) S.txOrigin = parts[0].t0;
       const box = $("transcriptCard");
       const en = S.uiLang === "en";
-      const origin = parts[0].t0;
-      const mins = Math.max(1, Math.round((Math.max.apply(null, parts.map(function (p) { return p.t1; })) - origin) / 60000));
+      const origin = S.txOrigin;
+      const mins = Math.max(1, Math.round((Math.max.apply(null, REC.parts.map(function (p) { return p.t1; })) - origin) / 60000));
       const body = el("div", { class: "tx-body u", text: en ? "Transcribing the recording…" : "正在根据录音重新转写…" });
       box.replaceChildren(el("div", { class: "stats-title" }, (en ? "Complete transcript · " : "完整逐字稿 · ") + mins + (en ? " min" : " 分钟"),
         el("span", { text: en ? "Speaker labels are inferred" : "说话人为自动判断，可能有误" })), body);
       box.hidden = false;
-      const hasBoth = parts.some(function (p) { return p.ch === "spk"; }) && parts.some(function (p) { return p.ch === "mic"; });
-      const rows = [];
+      const hasBoth = REC.parts.some(function (p) { return p.ch === "spk"; }) && REC.parts.some(function (p) { return p.ch === "mic"; });
+      const rows = (S.txRows || []).slice();
       let failed = 0;
       for (let i = 0; i < parts.length; i++) {
         body.textContent = (en ? "Transcribing part " : "正在转写第 ") + (i + 1) + " / " + parts.length + (en ? "…" : " 段…");
         try {
           const txt = await transcribePart(parts[i], hasBoth);
+          parts[i].done = true;
           txt.split("\n").forEach(function (line) {
             const m = line.trim().match(/^\[?(\d{1,2}):(\d{2})\]?\s*(ME|OTHER|我|对方)\s*[:：]\s*(.+)$/i);
             if (!m) { if (line.trim()) rows.push({ t: parts[i].t0 - origin, who: parts[i].ch === "spk" ? "OTHER" : "ME", text: line.trim() }); return; }
@@ -5326,9 +5549,24 @@
         } catch (e) { failed++; rows.push({ t: parts[i].t0 - origin, who: "", text: (en ? "[this part failed: " : "［这一段转写失败：") + errMsg(e) + (en ? "]" : "］") }); }
       }
       rows.sort(function (a, b) { return a.t - b.t; });
-      const fmt = function (ms) { const sec = Math.round(ms / 1000); return String(Math.floor(sec / 60)).padStart(2, "0") + ":" + String(sec % 60).padStart(2, "0"); };
-      const label = function (w) { return w === "ME" ? (en ? "Me" : "我") : (w === "OTHER" ? (en ? "Them" : "对方") : ""); };
-      S.fullTranscript = rows.map(function (r) { return "[" + fmt(r.t) + "] " + (label(r.who) ? label(r.who) + (en ? ": " : "：") : "") + r.text; }).join("\n");
+      const text = rows.map(function (r) { return "[" + fmtT(r.t) + "] " + (txLabel(r.who, en) ? txLabel(r.who, en) + (en ? ": " : "：") : "") + r.text; }).join("\n");
+      if (gen !== S.convGen) {
+        // The user already started a new conversation: attach this transcript to the one it belongs to.
+        try {
+          const list = await loadSessions();
+          const old = list.find(function (x) { return x.id === sid; });
+          if (old) {
+            old.transcript = text;
+            old.markdown += "\n\n" + (en ? "## Complete transcript\n" : "## 完整逐字稿\n") + text;
+            await idbDo("readwrite", function (st) { return st.put(list, "sessions"); });
+          }
+        } catch (_) {}
+        return;
+      }
+      S.txRows = rows;
+      const fmt = fmtT;
+      const label = function (w) { return txLabel(w, en); };
+      S.fullTranscript = text;
       body.replaceChildren();
       rows.forEach(function (r) {
         body.appendChild(el("div", null, el("b", { text: "[" + fmt(r.t) + "] " + (label(r.who) ? label(r.who) + (en ? ": " : "：") : "") }), r.text));
@@ -5345,6 +5583,13 @@
     // ---- New conversation: save this one, start clean (keeps listening if you are) ----
     function newConversation(fromTrash) {
       const had = S.utts.length > 0;
+      S.convGen++;
+      clearTimeout(S.recapTimer); clearTimeout(S.txTimer);
+      if (SPEC.timer) { clearTimeout(SPEC.timer); SPEC.timer = null; }
+      SPEC.heard = "";
+      S.liveInterim = {};
+      showInterim("");
+      $("listenLive").textContent = "";
       if (S.current) commitMemory(S.current);
       flushContributions();
       if (had) saveSessionLocal();
@@ -5352,11 +5597,12 @@
       if (S.autoTimer) clearTimeout(S.autoTimer);
       Object.keys(sttQueues).forEach(function (k) { sttQueues[k].items.forEach(function (it) { it.text = ""; }); });
       S.utts.forEach(function (u) { if (u.el) u.el.remove(); });
-      S.utts = []; S.answers = []; S.current = null; S.lastAutoQ = ""; S.sessId = 0; S.fullTranscript = "";
+      S.utts = []; S.answers = []; S.current = null; S.lastAutoQ = ""; S.sessId = 0; S.fullTranscript = ""; S.sessTitle = "";
       TALK.me = 0; TALK.them = 0; TALK.run = 0; TALK.fill = 0; TALK.nudged = false; TALK.fillNudged = false; updateTalk();
       HUD.maxTurn = 0; hudReset();
       SPEC.sHit = 0; SPEC.sMiss = 0;
-      REC.parts = [];
+      REC.parts = []; S.txRows = []; S.txOrigin = 0;
+      if (S.listening) recRestart();
       $("answerHost").replaceChildren();
       $("statsCard").hidden = true;
       $("transcriptCard").hidden = true;
@@ -5559,6 +5805,7 @@
       ["正在评估…", "Evaluating…"], ["评估失败：", "Evaluation failed: "], ["得分 ", "Score "], ["已评估", "Evaluated"],
       ["这个浏览器不支持语音识别：请在设置里填 Gemini Key，或直接打字。", "This browser has no speech recognition: add a Gemini key in Settings, or type."],
       ["练习 · ", "Practice · "],
+      ["搜索记录：问题、对方说的话、逐字稿…", "Search history: questions, what they said, transcripts…"],
       ["新对话", "New"], ["保存当前对话，开始一段新的（N）", "Save this conversation and start a new one (N)"],
       ["完整逐字稿", "Full transcript"], ["用录音重新生成每一个字都在的逐字稿，并标出说话人", "Re-transcribe the recording word for word, with speakers"],
       ["结束后生成完整逐字稿", "Complete transcript after the call"],

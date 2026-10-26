@@ -16,6 +16,8 @@ It's a single web page: no server, no build step. Everything runs in your browse
 
 - **Microphone first, no screen-share prompt**: *Start listening* uses only the microphone. On a call with headphones, tap **+ Meeting audio** at any time to add the meeting tab's sound (Chrome on desktop); Cue keeps the audio and drops the picture. On phones, the microphone hears everyone in the room.
 - **Full answers, not just bullets**: each answer has a one-line reply to say first, a complete spoken paragraph you can read out, then the key facts as points (Brief / Standard / Detailed / Cue-card in Settings).
+- **Practise what you were actually asked**: after a call, one tap turns the other side's questions into a practice set (read aloud, answer by voice, get scored).
+- **Searchable history**: search past conversations, including complete transcripts; titles come from the follow-up summary.
 - **New conversation (N)**: saves the current one to History and starts clean, even while listening.
 - **Automatic answers, as early as possible**: when the other side asks a question (with or without a question mark), an answer starts streaming right away. Cue even starts drafting from the words heard so far while they're still finishing the question; if the final question matches, the draft is kept. Each answer shows how fast it was ("Ready before they finished" or "0.6 s after they finished").
 - **Something to say in the first second**: while the full answer streams in, Cue shows a natural opener that fits the question type (pricing, comparison, timing, "why", a concern…), so you're never silent.
