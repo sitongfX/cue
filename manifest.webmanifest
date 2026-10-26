@@ -1,0 +1,15 @@
+{
+  "name": "Cue · 实时回答提示",
+  "short_name": "Cue",
+  "description": "听对方说话，实时给出可以直接说出口的回答，并引用你自己的资料。",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0d0e0c",
+  "theme_color": "#0d0e0c",
+  "lang": "zh-CN",
+  "icons": [
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
