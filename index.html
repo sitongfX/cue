@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob: mediastream:; connect-src 'self' http://127.0.0.1:* http://localhost:* https://generativelanguage.googleapis.com wss://generativelanguage.googleapis.com https://api.deepseek.com https://api.siliconflow.cn https://open.bigmodel.cn https://dashscope.aliyuncs.com;" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob: mediastream:; connect-src 'self' http://127.0.0.1:* http://localhost:* https://generativelanguage.googleapis.com wss://generativelanguage.googleapis.com https://*.run.app https://api.deepseek.com https://api.siliconflow.cn https://open.bigmodel.cn https://dashscope.aliyuncs.com;" />
   <title>Cue · 实时回答提示</title>
   <meta name="theme-color" content="#0d0e0c" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -212,6 +212,7 @@
     /* Floating window = teleprompter: one line, what's next, nothing else */
     body.pip .answer-foot, body.pip #historyWrap, body.pip .kb, body.pip #statsCard, body.pip .subqs, body.pip .q-x, body.pip #ready, body.pip .notice { display: none !important; }
     body.pip .stage { padding: 14px 16px; }
+    body.pip .nav, body.pip .col-convo, body.pip #liveSeg, body.pip .composer-wrap, body.pip .brand-sub, body.pip #btnPip, body.pip #btnLang, body.pip #btnInstall, body.pip .col-stage .col-head { display: none !important; }
     body.pip .answer { padding: 16px 18px; border-radius: 16px; }
     body.pip .q-text { font-size: 13px; color: var(--muted); }
     body.pip .lead { font-size: calc(26px * var(--scale)); line-height: 1.4; }
@@ -479,6 +480,7 @@
     </div>
 
     <div class="top-actions">
+      <button class="btn src-chip" id="btnOverlay" type="button" hidden title="置顶小窗：始终在最前面，放在摄像头旁边（桌面版）">置顶小窗</button>
       <button class="btn src-chip" id="btnAddTab" type="button" hidden title="把会议标签页的声音也给 Cue，分清谁在说话（只取声音，不看画面）"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span>会议声音</span></button>
       <button class="btn" id="btnInstall" type="button" hidden title="安装到电脑或手机主屏幕，像普通 App 一样打开">安装</button>
       <button class="icon-btn" id="btnPip" type="button" title="浮窗：把回答放进置顶小窗，放在摄像头旁边">
@@ -750,6 +752,15 @@
             <div class="help" style="margin-top: 6px;">保存位置：这个浏览器的 IndexedDB（voice-copilot → learn / trainlog）。换浏览器或清除数据会丢失，可以用「导出资料库」一起备份。</div>
             <div class="row" style="margin-top: 10px;">
               <button class="btn" id="btnExportTrain" type="button">导出训练数据</button>
+            </div>
+            <label class="switch" style="margin-top: 12px;">
+              <div>
+                <div class="label">贡献匿名样本，帮 Cue 变得更快（默认关闭）</div>
+                <div class="help">只在使用 Cue 云端时生效。上传的是无法还原成文字的特征编号和“草稿是否被沿用”，<b>不上传任何文字或声音</b>，也不记录你是谁。可以随时关闭。</div>
+              </div>
+              <input id="chkContribute" type="checkbox" />
+            </label>
+            <div class="row" style="margin-top: 6px;">
               <button class="btn btn-ghost" id="btnLearnReset" type="button">重置学习</button>
             </div>
           </div>
@@ -900,6 +911,13 @@
           </div>
           <span class="help" id="micTestMsg">戴耳机开会效果最好：对方的声音不会被麦克风重复收进来。</span>
         </div>
+        <label class="switch" id="protectRow" hidden>
+          <div>
+            <div class="label">共享屏幕时对方看不到 Cue（桌面版）</div>
+            <div class="help">开启后，你在会议里共享屏幕或录屏时，Cue 窗口不会出现在画面里。</div>
+          </div>
+          <input id="chkProtect" type="checkbox" checked />
+        </label>
         <div class="field">
           <span class="label">区分我和对方（只用麦克风时，实验功能）</span>
           <div class="row"><button class="btn" id="btnVoiceCal" type="button">让 Cue 认识我的声音</button><span class="help" id="voiceState">未设置</span></div>
@@ -1156,6 +1174,16 @@
     ]);
     // Hosted as a web app over HTTPS (e.g. Zipline): no local server, save data in this browser.
     const HOSTED = window.location.protocol === "https:" && !LOCAL_HOSTS_STATIC.has(window.location.hostname);
+    const DESKTOP = Boolean(window.cueDesktop);
+
+    // Invite codes carry the server address: cue_<secret>@<host[:port]>
+    function parseInvite(k) {
+      const m = /^(cue_[A-Za-z0-9_-]{12,})@([A-Za-z0-9.-]+(?::\d{2,5})?)$/.exec((k || "").trim());
+      if (!m) return null;
+      const local = /^(127\.0\.0\.1|localhost)(:|$)/.test(m[2]);
+      return { secret: m[1], base: (local ? "http://" : "https://") + m[2] };
+    }
+    function cueAuth() { return parseInvite(S.keys.cue); }
     const SERVER = (window.location && /^https?:$/.test(window.location.protocol))
       ? window.location.origin
       : "http://127.0.0.1:8765";
@@ -1174,6 +1202,8 @@
     }
     function cloudUrl(raw) {
       const u = new URL(raw);
+      const ca = cueAuth();
+      if (ca && u.origin === new URL(ca.base).origin) return u.toString();
       if (u.protocol !== "https:" || !CLOUD_HOSTS.has(u.hostname)) throw new Error("Blocked host " + u.hostname);
       return u.toString();
     }
@@ -1182,6 +1212,8 @@
     // 2. State (in memory only; nothing is persisted to browser storage)
     // =====================================================================
     const PROVIDERS = {
+      cue: { name: "Cue 云端", desc: "用邀请码，不需要自己的 Key", tag: "新", model: "gemini-3.5-flash-lite",
+        keyHelp: "粘贴邀请码（格式：cue_…@服务器地址）。", stt: true },
       gemini: { name: "Google Gemini", desc: "一个 Key 同时搞定转写和回答", tag: "推荐", model: "gemini-3.5-flash-lite",
         keyHelp: "以 AIza 或 AQ. 开头，在 aistudio.google.com 免费获取。", stt: true },
       siliconflow: { name: "硅基流动", desc: "国内直连 · 免费转写 + DeepSeek-V3", tag: "国内首选", model: "deepseek-ai/DeepSeek-V3",
@@ -1392,7 +1424,7 @@
         uiLang: S.uiLang, spokenLang: $("spokenLang").value, fastMic: $("chkFastMic").checked ? "1" : "0",
         translate: $("translateSel").value, liveStt: $("chkLiveStt").checked ? "1" : "0", coach: $("chkCoach").checked ? "1" : "0",
         spec: $("chkSpec").checked ? "1" : "0", recap: $("chkRecap").checked ? "1" : "0", semantic: $("chkSemantic").checked ? "1" : "0",
-        memory: $("chkMemory").checked ? "1" : "0", voiceMe: S.voiceMe ? String(S.voiceMe) : ""
+        memory: $("chkMemory").checked ? "1" : "0", contribute: $("chkContribute").checked ? "1" : "0", protect: $("chkProtect").checked ? "1" : "0", voiceMe: S.voiceMe ? String(S.voiceMe) : ""
       };
     }
 
@@ -1414,6 +1446,8 @@
       if (st.recap) $("chkRecap").checked = st.recap === "1";
       if (st.semantic) $("chkSemantic").checked = st.semantic === "1";
       if (st.memory) $("chkMemory").checked = st.memory === "1";
+      if (st.contribute) $("chkContribute").checked = st.contribute === "1";
+      if (st.protect) { $("chkProtect").checked = st.protect === "1"; applyProtect(); }
       if (typeof st.voiceMe === "string") { S.voiceMe = parseFloat(st.voiceMe) || 0; voiceStateUi(); }
       if (st.uiLang && st.uiLang !== S.uiLang) setUiLang(st.uiLang, true);
       if (st.lang) $("langSel").value = st.lang;
@@ -1645,6 +1679,7 @@
     function sttRoute() {
       if (S.keys.siliconflow) return "siliconflow";
       if (S.keys.gemini) return "gemini";
+      if (S.keys.cue) return "cue";
       if (S.server.ok && S.server.sttReady) return "server";
       return "browser";
     }
@@ -1654,6 +1689,7 @@
       if (r === "siliconflow") return "硅基流动 SenseVoice（云端，支持麦克风和电脑声音）";
       if (r === "gemini") return liveSttUsable() ? "Gemini Live 流式识别（最快，支持麦克风和电脑声音，中英文自动识别）" : "Gemini（云端，支持麦克风和电脑声音）";
       if (r === "server") return "本机服务转写（支持麦克风和电脑声音）";
+      if (r === "cue") return liveSttUsable() ? "Cue 云端 · Gemini Live 流式识别（支持麦克风和电脑声音）" : "Cue 云端转写（支持麦克风和电脑声音）";
       if (trackRecognitionUsable()) return "浏览器内置识别（麦克风和电脑声音都可以，免 Key；电脑声音为实验功能）";
       return "浏览器内置识别（只能识别麦克风）。要转写电脑里对方的声音，请填 Gemini 或硅基流动的 Key。";
     }
@@ -2143,6 +2179,7 @@
       try {
         if (route === "siliconflow") item.text = tidyTranscript(await sttSiliconflow(wav));
         else if (route === "gemini") item.text = await sttGemini(wav);
+        else if (route === "cue") item.text = await sttCue(wav);
         else item.text = tidyTranscript(await sttServer(ch, wav));
       } catch (e) {
         toast("转写失败：" + errMsg(e));
@@ -2356,6 +2393,7 @@
       S.liveInterim = {};
       if (S.timerHandle) clearInterval(S.timerHandle);
       if (S.current) commitMemory(S.current);
+      flushContributions();
       hudReset();
       showStats();
       if (S.utts.length >= 4 && $("chkRecap").checked && aiReady()) setTimeout(function () { recap(true); }, 400);
@@ -2458,6 +2496,39 @@
       if (buf.trim()) onLine(buf.trim());
     }
 
+    // ---- Cue Cloud: the server holds the Gemini key; the app signs in with an invite code ----
+    async function cueFetch(path, body, signal) {
+      const ca = cueAuth();
+      if (!ca) throw new Error("没有可用的 Cue 邀请码");
+      const r = await fetch(ca.base + path, {
+        method: "POST", signal: signal || timeoutSignal(20000),
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + ca.secret },
+        body: JSON.stringify(body)
+      });
+      if (!r.ok) {
+        let msg = "";
+        try { msg = String((await r.clone().json()).error || ""); } catch (_) {}
+        throw apiError("Cue 云端", r.status, msg);
+      }
+      return r;
+    }
+    async function streamCue(sys, user, signal, onDelta) {
+      const resp = await cueFetch("/v1/chat", { system: sys, user: user, model: S.model }, signal);
+      await readStream(resp, function (line) {
+        if (line.indexOf("data: {") !== 0) return;
+        try { const t = JSON.parse(line.slice(6)).t; if (t) onDelta(t); } catch (_) {}
+      });
+    }
+    async function sttCue(wav) {
+      const b64 = bufToBase64(await wav.arrayBuffer());
+      const r = await cueFetch("/v1/transcribe", { audio: b64, hint: $("bgInput").value.slice(0, 300) }, timeoutSignal(20000));
+      return tidyTranscript((await r.json()).text || "");
+    }
+    async function cueLiveToken() {
+      const r = await cueFetch("/v1/live-token", {}, timeoutSignal(10000));
+      return r.json();
+    }
+
     async function streamGemini(key, model, sys, user, signal, onDelta) {
       const m = /^gemini/.test(model) ? model : PROVIDERS.gemini.model;
       const resp = await geminiFetch(m, "streamGenerateContent?alt=sse", {
@@ -2519,6 +2590,7 @@
       const p = S.provider;
       const key = S.keys[p];
       if (p === "gemini" && key) return streamGemini(key, S.model, sys, user, signal, onDelta);
+      if (p === "cue" && key) return streamCue(sys, user, signal, onDelta);
       if (PROVIDERS[p].url && key) return streamOpenAI(PROVIDERS[p].url, key, S.model, sys, user, signal, onDelta);
       if (p === "ollama" && S.ollamaDirect) {
         let gotAny = false;
@@ -2551,6 +2623,12 @@
     let warmedAt = 0;
     function warmUp() {
       // Opens the TLS/HTTP2 connection early so the first real answer skips the handshake.
+      const ca = cueAuth();
+      if (ca && !S.keys.gemini && Date.now() - warmedAt > 60000) {
+        warmedAt = Date.now();
+        fetch(ca.base + "/v1/health", { headers: { "Authorization": "Bearer " + ca.secret } }).catch(function () {});
+        return;
+      }
       if (!S.keys.gemini || Date.now() - warmedAt < 60000) return;
       warmedAt = Date.now();
       geminiFetch(/^gemini/.test(S.model) ? S.model : PROVIDERS.gemini.model, "generateContent", {
@@ -3071,6 +3149,7 @@
 
     // Candidate providers from the key's shape, most likely first.
     function keyCandidates(k) {
+      if (parseInvite(k)) return ["cue"];
       if (/^(AIza[0-9A-Za-z_-]{20,}|AQ\.[0-9A-Za-z_.-]{20,})$/.test(k)) return ["gemini"];
       if (/^[0-9a-f]{32}\.[0-9A-Za-z]{8,}$/i.test(k)) return ["zhipu"];
       if (/^sk-[a-z]{40,}$/.test(k)) return ["siliconflow", "deepseek", "qwen"];
@@ -3083,6 +3162,12 @@
     async function keyWorksFor(provider, k) {
       const sig = timeoutSignal(8000);
       try {
+        if (provider === "cue") {
+          const inv = parseInvite(k);
+          if (!inv) return false;
+          const r = await fetch(inv.base + "/v1/health", { headers: { "Authorization": "Bearer " + inv.secret }, signal: sig });
+          return r.ok && Boolean((await r.json()).authed);
+        }
         if (provider === "gemini") {
           const r = await fetch(cloudUrl("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1"),
             { headers: { "x-goog-api-key": k }, signal: sig });
@@ -3350,7 +3435,7 @@
     if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
       navigator.mediaDevices.addEventListener("devicechange", refreshMicDevices);
     }
-    ["scenarioSel", "langSel", "lengthSel", "bgInput", "chkStrict", "modelInput", "spokenLang", "chkFastMic", "translateSel", "chkLiveStt", "chkCoach", "chkSpec", "chkRecap", "chkSemantic", "chkMemory"].forEach(function (id) {
+    ["scenarioSel", "langSel", "lengthSel", "bgInput", "chkStrict", "modelInput", "spokenLang", "chkFastMic", "translateSel", "chkLiveStt", "chkCoach", "chkSpec", "chkRecap", "chkSemantic", "chkMemory", "chkContribute", "chkProtect"].forEach(function (id) {
       $(id).addEventListener("change", persistKb);
     });
     $("scenarioSel").addEventListener("change", function () {
@@ -3452,7 +3537,7 @@
     // =====================================================================
     const IS_PHONE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "");
     // Phones and tablets cannot capture audio from other apps; only the microphone works there.
-    const CAN_SHARE_AUDIO = !IS_PHONE && Boolean(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
+    const CAN_SHARE_AUDIO = DESKTOP || (!IS_PHONE && Boolean(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia));
 
     function showView(v) {
       document.querySelectorAll(".view").forEach(function (sec) { sec.hidden = sec.dataset.view !== v; });
@@ -3655,6 +3740,7 @@
       const route = sttRoute();
       if (route === "siliconflow") return tidyTranscript(await sttSiliconflow(wav));
       if (route === "gemini") return await sttGemini(wav);
+      if (route === "cue") return await sttCue(wav);
       if (route === "server") return tidyTranscript(await sttServer(ch, wav));
       return "";
     }
@@ -3844,7 +3930,7 @@
     S.trackRecs = [];
 
     function liveSttUsable() {
-      return Boolean(S.keys.gemini) && $("chkLiveStt").checked && typeof WebSocket === "function";
+      return Boolean(S.keys.gemini || S.keys.cue) && $("chkLiveStt").checked && typeof WebSocket === "function";
     }
 
     // Chrome can run its speech recognizer on any audio track (e.g. a shared meeting tab),
@@ -3888,7 +3974,19 @@
 
       function connect() {
         ready = false;
-        try { ws = new WebSocket(LIVE_URL + "?key=" + encodeURIComponent(S.keys.gemini)); }
+        if (S.keys.gemini) { openSocket(LIVE_URL + "?key=" + encodeURIComponent(S.keys.gemini)); return; }
+        cueLiveToken().then(function (t) {
+          if (!stopped) openSocket(t.wsUrl + "?access_token=" + encodeURIComponent(t.token));
+        }).catch(function () {
+          if (stopped) return;
+          if (!everReady) { giveUp(); return; }
+          retries++;
+          setTimeout(function () { if (!stopped) connect(); }, Math.min(5000, 400 * retries));
+        });
+      }
+
+      function openSocket(url) {
+        try { ws = new WebSocket(url); }
         catch (_) { giveUp(); return; }
         const sock = ws;
         sock.onopen = function () {
@@ -4304,7 +4402,28 @@
       const d = $("tabDialog");
       if (typeof d.showModal === "function") d.showModal(); else d.setAttribute("open", "");
     }
-    $("btnAddTab").addEventListener("click", function () { extUi(); openTabDialog(); });
+    $("btnAddTab").addEventListener("click", function () {
+      if (DESKTOP) {   // the desktop app captures system audio directly; no tab picker
+        connectMeetingAudio(false).then(function (ok) {
+          if (ok) toast(S.uiLang === "en" ? "Computer audio connected. Cue now hears the other side." : "已接入电脑声音，现在能听到对方了。");
+        });
+        return;
+      }
+      extUi(); openTabDialog();
+    });
+    function applyProtect() { if (DESKTOP && window.cueDesktop.setProtect) window.cueDesktop.setProtect($("chkProtect").checked); }
+    $("chkProtect").addEventListener("change", applyProtect);
+    if (DESKTOP) {
+      $("protectRow").hidden = false;
+      $("btnOverlay").hidden = false;
+      $("btnAddTab").querySelector("span").textContent = "电脑声音";
+      $("btnOverlay").addEventListener("click", function () { window.cueDesktop.toggleOverlay(); });
+      if (window.cueDesktop.onOverlay) window.cueDesktop.onOverlay(function (on) {
+        document.body.classList.toggle("pip", Boolean(on));
+        $("btnOverlay").textContent = on ? (S.uiLang === "en" ? "Full window" : "恢复窗口") : (S.uiLang === "en" ? "Float on top" : "置顶小窗");
+      });
+      applyProtect();
+    }
     $("chkSemantic").addEventListener("change", scheduleSemIndex);
     $("btnTabCancel").addEventListener("click", function () { $("tabDialog").close(); });
     $("btnTabGo").addEventListener("click", async function () {
@@ -4338,7 +4457,7 @@
     // Each chunk of your materials is embedded once (gemini-embedding-001, 256 dims) and cached in IndexedDB.
     // Questions are embedded while the other side is still talking, so ranking costs nothing at answer time.
     var SEM = { model: "gemini-embedding-001", vecs: new Map(), q: new Map(), timer: null, busy: false, loaded: false };
-    function semUsable() { return Boolean(S.keys.gemini) && $("chkSemantic").checked; }
+    function semUsable() { return Boolean(S.keys.gemini || S.keys.cue) && $("chkSemantic").checked; }
     function hashStr(str) {
       let h = 2166136261;
       for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
@@ -4355,6 +4474,10 @@
     }
     function dot(a, b) { let x = 0; for (let i = 0; i < a.length; i++) x += a[i] * b[i]; return x; }
     async function embedTexts(texts, task) {
+      if (!S.keys.gemini && S.keys.cue) {
+        const rc = await cueFetch("/v1/embed", { texts: texts.map(function (t) { return t.slice(0, 6000); }), task: task }, timeoutSignal(15000));
+        return ((await rc.json()).vectors || []).map(function (v) { return unit(v); });
+      }
       const r = await fetch(cloudUrl("https://generativelanguage.googleapis.com/v1beta/models/" + SEM.model + ":batchEmbedContents"), {
         method: "POST", signal: timeoutSignal(15000),
         headers: { "Content-Type": "application/json", "x-goog-api-key": S.keys.gemini },
@@ -4885,7 +5008,24 @@
     async function trainLoad() {
       try { TRAIN = (await idbDo("readonly", function (st) { return st.get("trainlog"); })) || []; } catch (_) { TRAIN = []; }
     }
+    const CONTRIB = { queue: [] };
+    function hashFeat(str) {
+      let h = 2166136261;
+      for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+      return (h >>> 0) % 1048576;
+    }
+    function queueContribution(partial, kept, final) {
+      if (!$("chkContribute").checked || !S.keys.cue) return;
+      CONTRIB.queue.push({ f: qFeatures(partial).map(hashFeat), kept: kept, lang: CJK_RE.test(final) ? "zh" : "en", len: String(partial).length });
+      if (CONTRIB.queue.length >= 20) flushContributions();
+    }
+    function flushContributions() {
+      if (!CONTRIB.queue.length || !S.keys.cue) return;
+      const rows = CONTRIB.queue.splice(0, 200);
+      cueFetch("/v1/contribute", { consent: true, rows: rows }).catch(function () {});
+    }
     function logTrain(partial, final, kept) {
+      queueContribution(partial, kept, final);
       TRAIN.push({ t: Date.now(), partial: String(partial).slice(-300), final: String(final).slice(-300), kept: Boolean(kept), lang: CJK_RE.test(final) ? "zh" : "en" });
       if (TRAIN.length > 3000) TRAIN = TRAIN.slice(-3000);
       idbDo("readwrite", function (st) { return st.put(TRAIN, "trainlog"); }).catch(function () {});
@@ -5166,6 +5306,18 @@
       ["正在评估…", "Evaluating…"], ["评估失败：", "Evaluation failed: "], ["得分 ", "Score "], ["已评估", "Evaluated"],
       ["这个浏览器不支持语音识别：请在设置里填 Gemini Key，或直接打字。", "This browser has no speech recognition: add a Gemini key in Settings, or type."],
       ["练习 · ", "Practice · "],
+      ["Cue 云端", "Cue Cloud"], ["用邀请码，不需要自己的 Key", "Use an invite code; no API key of your own"],
+      ["粘贴邀请码（格式：cue_…@服务器地址）。", "Paste your invite code (format: cue_…@server)."],
+      ["Cue 云端 · Gemini Live 流式识别（支持麦克风和电脑声音）", "Cue Cloud · Gemini Live streaming (mic and computer audio)"],
+      ["Cue 云端转写（支持麦克风和电脑声音）", "Cue Cloud transcription (mic and computer audio)"],
+      ["贡献匿名样本，帮 Cue 变得更快（默认关闭）", "Contribute anonymous examples to make Cue faster (off by default)"],
+      ["只在使用 Cue 云端时生效。上传的是无法还原成文字的特征编号和“草稿是否被沿用”，", "Only with Cue Cloud. Sends hashed feature numbers that can't be turned back into words, plus whether the early draft was kept; "],
+      ["不上传任何文字或声音", "never any text or audio"], ["，也不记录你是谁。可以随时关闭。", ", and not who you are. You can turn it off anytime."],
+      ["共享屏幕时对方看不到 Cue（桌面版）", "Hide Cue from screen sharing (desktop app)"],
+      ["开启后，你在会议里共享屏幕或录屏时，Cue 窗口不会出现在画面里。", "When on, the Cue window doesn't appear when you share your screen or record."],
+      ["置顶小窗", "Float on top"], ["电脑声音", "Computer audio"],
+      ["置顶小窗：始终在最前面，放在摄像头旁边（桌面版）", "Float on top: always in front, next to your camera (desktop app)"],
+      ["桌面版：开始后点顶部「＋ 电脑声音」，直接收会议里对方的声音，不用选标签页；「置顶小窗」可以放在摄像头旁边，共享屏幕时对方看不到。", "Desktop app: after starting, tap “+ Computer audio” to hear the other side directly, no tab picker. “Float on top” sits next to your camera and is hidden from screen sharing."],
       ["不是问题（X）：以后类似的话不再自动回答", "Not a question (X): Cue won't auto-answer similar lines"],
       ["保存位置：这个浏览器的 IndexedDB（voice-copilot → learn / trainlog）。换浏览器或清除数据会丢失，可以用「导出资料库」一起备份。", "Stored in this browser's IndexedDB (voice-copilot → learn / trainlog). It's lost if you switch browsers or clear data; Export materials backs it up too."],
       ["导出训练数据", "Export training data"], ["（含学习记录）", " (including learning data)"],
@@ -5427,6 +5579,7 @@
     // =====================================================================
     applyDeviceLimits();
     if (!CAN_SHARE_AUDIO) $("heroNoteText").textContent = "只用麦克风，不会共享屏幕。把手机放在你和对方之间，双方的话都能听到。";
+    if (DESKTOP) $("heroNoteText").textContent = "桌面版：开始后点顶部「＋ 电脑声音」，直接收会议里对方的声音，不用选标签页；「置顶小窗」可以放在摄像头旁边，共享屏幕时对方看不到。";
     showView("live");
     setPane("stage");
     if (window.indexedDB) $("btnForgetLocal").hidden = false;

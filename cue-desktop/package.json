@@ -1,0 +1,36 @@
+{
+  "name": "cue-desktop",
+  "productName": "Cue",
+  "version": "0.1.0",
+  "description": "Cue desktop app: live answer cues with direct system audio capture and a floating window hidden from screen sharing.",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "smoke": "electron . --smoke",
+    "dist": "electron-builder --publish never"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "io.github.sitongfx.cue",
+    "productName": "Cue",
+    "files": ["main.js", "preload.js", "app/**/*"],
+    "directories": { "output": "dist" },
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": ["dmg"],
+      "icon": "app/icon-512.png",
+      "identity": null,
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Cue listens to the conversation to show you live answer cues.",
+        "NSAudioCaptureUsageDescription": "Cue hears the other side of your call so it can answer their questions.",
+        "NSScreenCaptureUsageDescription": "macOS requires screen-recording permission to capture system audio. Cue keeps the sound only."
+      }
+    },
+    "win": { "target": ["nsis"], "icon": "app/icon-512.png" },
+    "linux": { "target": ["AppImage"], "icon": "app/icon-512.png", "category": "Office" }
+  }
+}

@@ -60,6 +60,29 @@ The web page can only get another tab's sound through Chrome's share picker. The
 
 The extension asks Chrome for a capture id for that tab that only the Cue tab can redeem, and Cue opens the audio itself. Since Chrome mutes a captured tab, Cue plays it back so you still hear the meeting. No audio passes through the extension and nothing is recorded.
 
+## Cue Cloud (optional backend)
+
+[`cue-server/`](cue-server/) is a small standard-library Python server so people can use Cue with an **invite code** instead of their own API key:
+
+- `POST /v1/chat` streams answers, `POST /v1/embed` powers meaning-based search, `POST /v1/transcribe` is the fallback recognizer.
+- `POST /v1/live-token` mints a **single-use, short-lived token** for Gemini Live, so the browser streams audio directly to Gemini without ever seeing the server's key.
+- `POST /v1/contribute` accepts **opt-in, anonymous** training rows: hashed feature numbers plus a label, never text or audio.
+- Invite codes, per-invite rate limits and daily caps, a CORS allowlist, request-size limits, and no logging of what anyone says.
+
+Invite codes carry the server address (`cue_…@your-server.run.app`), so users paste one string and Cue detects it like any other key.
+
+Deploy to **your own** Google Cloud project with Cloud Run (`cue-server/deploy.sh <project-id>`; easiest from Cloud Shell). The Gemini key goes into Secret Manager, never into the image. Tests: `python3 cue-server/test_server.py`.
+
+## Desktop app (Electron)
+
+[`cue-desktop/`](cue-desktop/) wraps the same app and adds what a browser can't do:
+
+- **Computer audio without a share picker**: Windows uses loopback capture directly; macOS shows the native system picker once (macOS requires it for system audio).
+- **Float on top**: a compact always-on-top teleprompter window.
+- **Hidden from screen sharing**: content protection keeps Cue out of screen shares and recordings.
+
+Installers for macOS (.dmg), Windows (.exe) and Linux (.AppImage) are built by GitHub Actions ([`.github/workflows/desktop.yml`](.github/workflows/desktop.yml)) and attached to each run as artifacts. Builds are unsigned for now: on macOS, right-click → Open the first time; on Windows, choose "More info → Run anyway".
+
 ## Speech recognition
 
 | Channel | Engine | Notes |
