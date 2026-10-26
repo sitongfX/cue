@@ -63,7 +63,7 @@ class ServerTest(unittest.TestCase):
         cls.data = tempfile.mkdtemp()
         env = dict(os.environ, GEMINI_API_KEY="test-key", CUE_INVITES="alice:cue_testinvite000001",
                    UPSTREAM="http://127.0.0.1:%d" % cls.fake.server_address[1], PORT=str(cls.port),
-                   HOST="127.0.0.1", DATA_DIR=cls.data, RATE_PER_MIN="7",
+                   HOST="127.0.0.1", DATA_DIR=cls.data, RATE_PER_MIN="8",
                    ALLOWED_ORIGINS="https://sitongfx.github.io,app://cue")
         cls.proc = subprocess.Popen([sys.executable, os.path.join(HERE, "server.py")], env=env,
                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -122,6 +122,11 @@ class ServerTest(unittest.TestCase):
     def test_05b_transcribe(self):
         j = json.load(self.req("/v1/transcribe", {"audio": "UklGRg==", "hint": "Cue"}))
         self.assertEqual(j["text"], "你好世界")
+        j = json.load(self.req("/v1/transcribe", {"audio": "GkXfow==", "mime": "audio/webm", "instruction": "label speakers", "long": True}))
+        path, key, body = [c for c in FakeGemini.calls if ":generateContent" in c[0]][-1]
+        self.assertEqual(body["contents"][0]["parts"][0]["inlineData"]["mimeType"], "audio/webm")
+        self.assertEqual(body["contents"][0]["parts"][1]["text"], "label speakers")
+        self.assertEqual(body["generationConfig"]["maxOutputTokens"], 8192)
 
     def test_06_live_token(self):
         j = json.load(self.req("/v1/live-token", {}))

@@ -15,6 +15,8 @@ It's a single web page: no server, no build step. Everything runs in your browse
 ## Features
 
 - **Microphone first, no screen-share prompt**: *Start listening* uses only the microphone. On a call with headphones, tap **+ Meeting audio** at any time to add the meeting tab's sound (Chrome on desktop); Cue keeps the audio and drops the picture. On phones, the microphone hears everyone in the room.
+- **Full answers, not just bullets**: each answer has a one-line reply to say first, a complete spoken paragraph you can read out, then the key facts as points (Brief / Standard / Detailed / Cue-card in Settings).
+- **New conversation (N)**: saves the current one to History and starts clean, even while listening.
 - **Automatic answers, as early as possible**: when the other side asks a question (with or without a question mark), an answer starts streaming right away. Cue even starts drafting from the words heard so far while they're still finishing the question; if the final question matches, the draft is kept. Each answer shows how fast it was ("Ready before they finished" or "0.6 s after they finished").
 - **Something to say in the first second**: while the full answer streams in, Cue shows a natural opener that fits the question type (pricing, comparison, timing, "why", a concern…), so you're never silent.
 - **Several questions at once**: if they ask two or three things in one breath, each one becomes a chip that's crossed off as you answer it, and the AI answers them in order.
@@ -85,14 +87,13 @@ Installers for macOS (.dmg), Windows (.exe) and Linux (.AppImage) are built by G
 
 ## Speech recognition
 
-| Channel | Engine | Notes |
+| What | Engine | Notes |
 |---|---|---|
-| The other side (meeting audio) | **Gemini Live streaming** (`gemini-3.5-transcribe-live`) | Audio is streamed in 50 ms frames over a WebSocket with a 300 ms end-of-speech window; words appear while they talk and the final sentence about 0.1–0.3 s after they stop (measured; the default setting took about 0.75 s). Chinese and English are detected automatically. |
-| Your microphone | Browser speech recognition (*Fast recognition*, on by default) | Words appear as you speak; one language at a time (set *Spoken language*). Turn it off or choose *mixed* to use Gemini Live instead. |
-| Without a Gemini key | Browser speech recognition | Chrome versions that can recognize an audio track also transcribe the meeting tab (experimental); otherwise only the microphone works. |
-| Fallback | Gemini (`gemini-3.5-flash-lite`) per phrase | Used automatically if streaming can't connect. |
-
-Why the other side's audio needs a cloud engine: the browser's built-in recognizer has traditionally only listened to the default microphone. Audio captured from a meeting tab is raw sound data, so it has to be sent to an engine that accepts audio, such as Gemini.
+| Live transcript (mic and meeting audio) | **Gemini Live streaming** (`gemini-3.5-transcribe-live`, WebSocket) | Used whenever a Gemini key or Cue Cloud is set. 16 kHz audio in 50 ms frames with a 300 ms end-of-speech window: words appear while people talk, final text 0.1–0.3 s after they stop. Chinese and English auto-detected. Small pieces are merged into the same speaker's line, so slow speech with pauses isn't dropped. |
+| Complete transcript after the call | `gemini-3.5-flash-lite` on the recording | A compressed recording (Opus, 32 kbps, 5-minute pieces) is kept **in memory only** during the call and re-transcribed word for word when you stop, with `[mm:ss]` timestamps and speaker labels. |
+| Who said what | Separate channels, or content-based labelling | With **+ Meeting audio**, your mic is "me" and the meeting tab is "them" (exact). With the mic only, `gemini-3.5-flash-lite` labels each line from the content and your materials about a second later; tap a label to fix it. |
+| No key | Browser speech recognition | One language at a time; words still pending when it pauses are kept. |
+| Fallback | Gemini per phrase | If streaming can't connect. |
 
 ## Privacy
 

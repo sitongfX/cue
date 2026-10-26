@@ -40,7 +40,7 @@ EMBED_MODEL = "gemini-embedding-001"
 LIVE_WS = ("wss://generativelanguage.googleapis.com/ws/"
            "google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained")
 MAX_BODY = 256 * 1024
-MAX_AUDIO_BODY = 2 * 1024 * 1024
+MAX_AUDIO_BODY = 8 * 1024 * 1024   # a 5-minute Opus recording is about 1.6 MB as base64
 STT_MODEL = "gemini-3.5-flash-lite"
 DEFAULT_ORIGINS = "https://sitongfx.github.io,app://cue"
 
@@ -292,13 +292,17 @@ class Handler(BaseHTTPRequestHandler):
             self._json(400, {"error": "audio (base64 WAV) required"}, who)
             return
         hint = str(body.get("hint", ""))[:400]
+        mime = body.get("mime") if body.get("mime") in ("audio/wav", "audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg") else "audio/wav"
+        instruction = str(body.get("instruction", ""))[:2000] or (
+            "Transcribe the speech in this audio verbatim, in the language(s) actually spoken. Never translate. "
+            "Output only the transcript, or nothing if there is no clear speech." + ("\nWords that may appear: " + hint if hint else ""))
+        long_clip = bool(body.get("long"))
         payload = {"contents": [{"role": "user", "parts": [
-            {"inlineData": {"mimeType": "audio/wav", "data": audio}},
-            {"text": "Transcribe the speech in this audio verbatim, in the language(s) actually spoken. Never translate. "
-                     "Output only the transcript, or nothing if there is no clear speech." + ("\nWords that may appear: " + hint if hint else "")}]}],
-            "generationConfig": {"temperature": 0, "maxOutputTokens": 400, "thinkingConfig": {"thinkingLevel": "minimal"}}}
+            {"inlineData": {"mimeType": mime, "data": audio}}, {"text": instruction}]}],
+            "generationConfig": {"temperature": 0, "maxOutputTokens": 8192 if long_clip else 400,
+                                 "thinkingConfig": {"thinkingLevel": "minimal"}}}
         try:
-            with upstream_request("/v1beta/models/%s:generateContent" % STT_MODEL, payload, timeout=20) as up:
+            with upstream_request("/v1beta/models/%s:generateContent" % STT_MODEL, payload, timeout=150 if long_clip else 20) as up:
                 data = json.loads(up.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
             self._json(502, {"error": "Gemini %d: %s" % (e.code, upstream_error_message(e))}, who)

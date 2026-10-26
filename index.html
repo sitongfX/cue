@@ -205,6 +205,13 @@
     .learn-bar { height: 6px; border-radius: 4px; background: var(--line); overflow: hidden; margin-top: 6px; }
     .learn-bar > span { display: block; height: 100%; background: var(--accent); }
     .coach-rescue b { color: var(--me); font-weight: 600; }
+    .script { margin-top: 12px; padding-left: 14px; border-left: 2px solid var(--line-2); font-size: calc(17px * var(--scale)); line-height: 1.75; color: var(--text); }
+    .utt .who { cursor: pointer; border-radius: 6px; padding: 0 4px; margin-left: -4px; }
+    .utt .who:hover { background: var(--raised); }
+    .utt.relabeled .who { animation: rise .3s ease-out; }
+    .tx-body { margin-top: 12px; white-space: pre-wrap; font-size: 14px; line-height: 1.75; color: var(--text-2); max-height: 420px; overflow: auto; }
+    .tx-body b { color: var(--text); }
+    .src-hint { margin: 8px 12px 0; padding: 8px 12px; border-radius: 10px; border: 1px dashed var(--line-2); font-size: 12.5px; color: var(--text-2); display: flex; gap: 8px; align-items: center; }
     .q { position: relative; padding-right: 34px; }
     .q-x { position: absolute; top: -4px; right: -6px; width: 28px; height: 28px; border-radius: 8px; border: 0; background: transparent; color: var(--muted); cursor: pointer; display: grid; place-items: center; }
     .q-x:hover { background: var(--raised); color: var(--text); }
@@ -217,6 +224,7 @@
     body.pip .q-text { font-size: 13px; color: var(--muted); }
     body.pip .lead { font-size: calc(26px * var(--scale)); line-height: 1.4; }
     body.pip .points li.covered { display: none; }
+    body.pip .script { font-size: calc(19px * var(--scale)); }
     body.pip .points li { font-size: calc(18px * var(--scale)); }
     body.pip .points li.next { font-size: calc(21px * var(--scale)); }
     body.pip .hud { top: 0; font-size: 12px; padding: 8px 10px; }
@@ -531,12 +539,14 @@
           <div class="col-head">
             <span class="col-title">对话 <span class="talk u" id="talkRatio"></span></span>
             <div class="col-tools">
+              <button class="btn btn-ghost" id="btnNew" type="button" title="保存当前对话，开始一段新的（N）">新对话</button>
               <button class="btn btn-ghost" id="btnRecap" type="button" title="生成摘要、约定的事项和跟进邮件">跟进</button>
               <button class="btn btn-ghost" id="btnReview" type="button" title="复盘：哪里答得好、哪里可以更好，并把改进后的回答存进资料库">复盘</button>
               <details class="menu" id="moreMenu">
                 <summary class="btn btn-ghost" title="更多">更多</summary>
                 <div class="menu-pop">
                   <button class="btn btn-ghost" id="btnSummary" type="button" title="根据目前的对话生成纪要">纪要</button>
+                  <button class="btn btn-ghost" id="btnTranscript" type="button" title="用录音重新生成每一个字都在的逐字稿，并标出说话人">完整逐字稿</button>
                   <button class="btn btn-ghost" id="btnExport" type="button" title="导出对话与回答为 Markdown">导出 Markdown</button>
                 </div>
               </details>
@@ -545,6 +555,7 @@
               </button>
             </div>
           </div>
+          <div class="src-hint" id="srcHint" hidden><span>线上会议？点顶部「＋ 会议声音」，就能百分之百分清你和对方。</span><button class="link-btn" id="srcHintAdd" type="button">现在添加</button></div>
           <div class="convo" id="convo">
             <div class="convo-empty" id="convoEmpty">
               <strong>对话会实时出现在这里</strong>
@@ -616,6 +627,7 @@
                   <span><kbd>/</kbd> 打字提问</span>
                   <span><kbd>1</kbd>–<kbd>4</kbd> 追问</span>
                   <span><kbd>R</kbd> 帮我圆回来</span>
+                  <span><kbd>N</kbd> 新对话</span>
                   <span><kbd>X</kbd> 不是问题</span>
                   <span><kbd>Esc</kbd> 关闭面板</span>
                 </div>
@@ -631,6 +643,7 @@
               </div>
 
               <div class="stats" id="statsCard" hidden></div>
+              <div class="stats" id="transcriptCard" hidden></div>
 
               <div class="listening" id="listenHint" hidden>
                 <div class="pulse-ring"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></div>
@@ -932,8 +945,8 @@
         </div>
         <label class="switch">
           <div>
-            <div class="label">极速识别我的麦克风</div>
-            <div class="help">用浏览器自带的识别，边说边出字，最快；一次只能识别一种语言。电脑声音仍用 Gemini 识别。</div>
+            <div class="label">没有 Gemini Key 时用浏览器识别麦克风</div>
+            <div class="help">有 Gemini Key（或 Cue 云端）时自动改用 Gemini Live：中英文都能识别、不丢字。没有时用浏览器自带识别，一次只能识别一种语言。</div>
           </div>
           <input id="chkFastMic" type="checkbox" checked />
         </label>
@@ -972,9 +985,9 @@
         <div class="field">
           <span class="label">回答长度</span>
           <select class="select" id="lengthSel">
-            <option value="brief">简短 · 一句话 + 1–2 个要点</option>
-            <option value="standard" selected>标准 · 一句话 + 3 个要点</option>
-            <option value="detailed">详细 · 要点 + 例子</option>
+            <option value="brief">简短 · 一句话 + 2 个要点</option>
+            <option value="standard" selected>标准 · 一句话 + 一段完整说法 + 3 个要点</option>
+            <option value="detailed">详细 · 更完整的说法（含例子）+ 4–5 个要点</option>
             <option value="cue">提示卡 · 一句开场 + 几个关键词（不用照念，说出来更自然）</option>
           </select>
         </div>
@@ -998,6 +1011,20 @@
             <div class="help">换个说法问也能找到你的资料，资料库里有现成答案时立刻显示。需要 Gemini Key。</div>
           </div>
           <input id="chkSemantic" type="checkbox" checked />
+        </label>
+        <label class="switch">
+          <div>
+            <div class="label">结束后生成完整逐字稿</div>
+            <div class="help">通话中在内存里保留压缩录音，停止后重新转写一遍，每一个字都在，并标出说话人。录音不会保存到硬盘，开始新对话或关闭页面即删除。</div>
+          </div>
+          <input id="chkRecord" type="checkbox" checked />
+        </label>
+        <label class="switch">
+          <div>
+            <div class="label">自动分清我和对方（只用麦克风时）</div>
+            <div class="help">根据说话内容和你的资料判断每句话是谁说的（约 1 秒后更新标签）。点句子前面的「我 / 对方」可以手动改。线上会议最准的方式仍是「＋ 会议声音」。</div>
+          </div>
+          <input id="chkRoles" type="checkbox" checked />
         </label>
         <label class="switch">
           <div>
@@ -1424,7 +1451,7 @@
         uiLang: S.uiLang, spokenLang: $("spokenLang").value, fastMic: $("chkFastMic").checked ? "1" : "0",
         translate: $("translateSel").value, liveStt: $("chkLiveStt").checked ? "1" : "0", coach: $("chkCoach").checked ? "1" : "0",
         spec: $("chkSpec").checked ? "1" : "0", recap: $("chkRecap").checked ? "1" : "0", semantic: $("chkSemantic").checked ? "1" : "0",
-        memory: $("chkMemory").checked ? "1" : "0", contribute: $("chkContribute").checked ? "1" : "0", protect: $("chkProtect").checked ? "1" : "0", voiceMe: S.voiceMe ? String(S.voiceMe) : ""
+        memory: $("chkMemory").checked ? "1" : "0", record: $("chkRecord").checked ? "1" : "0", roles: $("chkRoles").checked ? "1" : "0", contribute: $("chkContribute").checked ? "1" : "0", protect: $("chkProtect").checked ? "1" : "0", voiceMe: S.voiceMe ? String(S.voiceMe) : ""
       };
     }
 
@@ -1446,6 +1473,8 @@
       if (st.recap) $("chkRecap").checked = st.recap === "1";
       if (st.semantic) $("chkSemantic").checked = st.semantic === "1";
       if (st.memory) $("chkMemory").checked = st.memory === "1";
+      if (st.record) $("chkRecord").checked = st.record === "1";
+      if (st.roles) $("chkRoles").checked = st.roles === "1";
       if (st.contribute) $("chkContribute").checked = st.contribute === "1";
       if (st.protect) { $("chkProtect").checked = st.protect === "1"; applyProtect(); }
       if (typeof st.voiceMe === "string") { S.voiceMe = parseFloat(st.voiceMe) || 0; voiceStateUi(); }
@@ -1751,6 +1780,7 @@
       if (!S.listening) { document.documentElement.style.setProperty("--lvl-me", "0"); document.documentElement.style.setProperty("--lvl-them", "0"); }
       $("meterSpk").closest(".meter").hidden = !S.spk;
       $("btnAddTab").hidden = !(S.listening && CAN_SHARE_AUDIO && !S.spk && S.source !== "system");
+      $("srcHint").hidden = $("btnAddTab").hidden || S.utts.length < 2;
       $("btnStartLabel").textContent = S.listening ? "停止" : "开始";
       $("btnFab").classList.toggle("live", S.listening);
       $("btnFab").setAttribute("aria-label", S.listening ? "停止收音" : "开始收音");
@@ -1817,7 +1847,9 @@
         VOICE.lastFinal = nowP;
       }
       if (ch === "mic") hudMine(text, true); else hudReset();
-      if (!text || text.length < 2) return null;
+      const prev = S.utts[S.utts.length - 1];
+      const joinable = prev && Date.now() - prev.at < (ch === "room" ? 2500 : 4000) && prev.text.length < 600;
+      if (!text || (text.length < 2 && !(joinable && prev.ch === ch))) return null;
       if (HALLUCINATIONS.some(function (h) { return text.indexOf(h) !== -1; })) return null;
       if (isEcho(ch, text)) return null;
       // Mic-only mode can't tell voices apart: statements right after an answer are treated as you answering.
@@ -1828,7 +1860,10 @@
       $("convoEmpty").hidden = true;
       const last = S.utts[S.utts.length - 1];
       let u;
-      if (last && last.ch === ch && now - last.at < 2500 && !/[。！？!?.]$/.test(last.text)) {
+      // Same speaker continuing: append. With separate channels (mic / meeting audio) the speaker is known,
+      // so slow speech with pauses stays in one block; in mic-only mode a sentence end starts a new block.
+      if (last && last.ch === ch && !last.locked && last.text.length < 600 &&
+          (ch === "room" ? (now - last.at < 2500 && !/[。！？!?.]$/.test(last.text)) : now - last.at < 4000)) {
         last.text = last.text + (/[a-z0-9]$/i.test(last.text) ? " " : "") + text;
         last.at = now;
         last.textEl.textContent = last.text;
@@ -1836,10 +1871,11 @@
       } else {
         u = { id: S.nextId++, ch: ch, text: text, at: now };
         u.textEl = el("div", { class: "utt-text", text: text });
+        u.t0 = now;
         u.el = el("div", { class: "utt " + whoClass(ch), title: "点击让 AI 回答这句",
           onclick: function () { if (u.ch !== "mic") learnQ(u.text, 1); answer(u.text, { utt: u }); } },
           el("div", { class: "utt-meta" },
-            el("span", { class: "who", text: whoLabel(ch) }),
+            el("span", { class: "who", title: "点一下切换：我 / 对方", text: whoLabel(ch), onclick: function (ev) { ev.stopPropagation(); flipSpeaker(u); } }),
             el("span", { text: fmtClock(new Date(now)) }),
             el("span", { class: "utt-act", text: "回答这句 →" })),
           u.textEl);
@@ -1849,6 +1885,7 @@
       const convo = $("convo");
       convo.scrollTop = convo.scrollHeight;
       scheduleTranslate(u);
+      if (u.ch === "room") scheduleRoles();
 
       if (ch !== "mic" && SPEC.timer) { clearTimeout(SPEC.timer); SPEC.timer = null; }
       if (ch !== "mic") S.lastFinalAt = now;
@@ -2197,6 +2234,7 @@
       rec.continuous = true;
       rec.interimResults = true;
       rec.lang = recognitionLang();
+      let pendingInterim = "";
       rec.onresult = function (ev) {
         let interim = "";
         for (let i = ev.resultIndex; i < ev.results.length; i++) {
@@ -2204,6 +2242,7 @@
           if (r.isFinal) addUtterance(ch, r[0].transcript);
           else interim += r[0].transcript;
         }
+        pendingInterim = interim;
         showInterim(interim);
         if (ch === "room" && S.spk) ch = "mic";
         if (interim && ch !== "spk" && !looksLikeQuestion(interim)) markCoveredPoints(interim, true);
@@ -2211,6 +2250,8 @@
         else if (ch !== "mic") { S.liveInterim[ch] = interim; if (interim) maybeSpeculate(ch, interim); }
       };
       rec.onend = function () {
+        // Chrome ends recognition after a pause; words it hadn't finalized yet would otherwise be lost.
+        if (pendingInterim.trim()) { addUtterance(ch, pendingInterim); pendingInterim = ""; }
         if (S.listening && S.recog === rec) { try { rec.start(); } catch (_) {} }
         else showInterim("");
       };
@@ -2286,13 +2327,14 @@
             ms = await navigator.mediaDevices.getUserMedia({ audio: audioOpts });
           }
           refreshMicDevices();
+          recStart("mic", ms);
           // Without the other side's audio, everything the mic hears may be them: let it trigger answers.
           const ch = (S.source === "inperson" || !S.spk) ? "room" : "mic";
           const micEnded = function () { S.mic = null; if (!S.spk && S.listening) stopListening(); };
           const micSegments = function (st) {
             return createCapture(st, $("meterMic"), function (wav) { onSegment(ch, wav); }, micEnded);
           };
-          S.fastMic = fastMicUsable();
+          S.fastMic = fastMicUsable() && !liveSttUsable();
           S.mic = (!S.fastMic && liveSttUsable())
             ? createLiveTranscriber(ch, ms, $("meterMic"), micEnded, function (st) { S.mic = micSegments(st); })
             : micSegments(ms);
@@ -2304,6 +2346,7 @@
 
       if (!S.mic && !S.spk) return;
       $("statsCard").hidden = true;
+      $("transcriptCard").hidden = true;
       SPEC.sHit = 0; SPEC.sMiss = 0;
       S.listening = true;
       S.startedAt = Date.now();
@@ -2396,6 +2439,7 @@
       flushContributions();
       hudReset();
       showStats();
+      recStopAll().then(function () { if ($("chkRecord").checked && REC.parts.length && aiReady()) setTimeout(fullTranscript, 1500); });
       if (S.utts.length >= 4 && $("chkRecap").checked && aiReady()) setTimeout(function () { recap(true); }, 400);
       else if (S.utts.length >= 4) toast("已停止。点「跟进」生成摘要和跟进邮件，点「复盘」看看哪里可以答得更好。", 6000);
       archiveSession();
@@ -2435,22 +2479,27 @@
       const lang = $("langSel").value;
       const len = $("lengthSel").value;
       const scen = SCENARIO_PROMPTS[$("scenarioSel").value] || SCENARIO_PROMPTS.meeting;
-      const nPoints = len === "brief" ? "1-2" : (len === "detailed" ? "4-5" : "3");
+      const nPoints = len === "brief" ? "2" : (len === "detailed" ? "4-5" : "3");
+      const para = len === "brief" ? "" : (len === "detailed" ? "5-7" : "3-5");
       let fmt;
       if (len === "cue") {
         fmt = lang === "zh"
           ? "用中文。格式严格如下：\n第1行：一句很短的开场白，我可以直接说出口（不超过20字，不要前缀）。\n然后 3-5 行关键词提示，每行以「• 」开头，每行不超过10个字，只写关键词、数字或要点名，不写完整句子。\n不要寒暄、标题或加粗。"
           : "Format strictly:\nLine 1: a very short opener I can say out loud (max 12 words, no prefix).\nThen 3-5 cue lines, each starting with \"• \", max 4 words each: keywords and numbers only, no full sentences.\nNo greetings, headings or bold.";
       } else if (lang === "en") {
-        fmt = "Reply in English. Format strictly:\nLine 1: one natural first-person sentence I can say out loud right now (max 25 words, no prefix).\n" +
-          "Then " + nPoints + " lines, each starting with \"• \", short and concrete." + (len === "detailed" ? " Include one brief real example." : "") +
+        fmt = "Reply in English. Format strictly:\nLine 1: one natural first-person sentence that directly answers, which I can say out loud right now (max 25 words, no prefix).\n" +
+          (para ? "Line 2: start with \"» \" and write a complete spoken answer of " + para + " sentences in first person that continues from line 1 without repeating it, natural and specific (facts, numbers, how, why" + (len === "detailed" ? ", plus one concrete example" : "") + "), ready to read out.\n" : "") +
+          "Then " + nPoints + " lines, each starting with \"• \": the key facts or numbers to remember, short and concrete." +
           "\nNo greetings, no headings, no markdown bold.";
       } else if (lang === "bilingual") {
-        fmt = "格式严格如下：\n第1行：一句我可以直接说出口的自然英文口语回答（不超过25个词，不要前缀）。\n第2行：以「• 中文：」开头，给出这句话的中文意思。\n" +
+        fmt = "格式严格如下：\n第1行：一句我可以直接说出口的自然英文口语回答（不超过25个词，不要前缀）。\n" +
+          (para ? "第2行：以「» 」开头，一段 " + para + " 句完整的英文口语回答，可以直接照着说，具体、有细节。\n" : "") +
+          "然后以「• 中文：」开头的一行，给出完整回答的中文意思。\n" +
           "然后 " + nPoints + " 行英文要点，每行以「• 」开头，后面括号附简短中文。\n不要寒暄、标题或加粗。";
       } else {
-        fmt = "用中文回答。格式严格如下：\n第1行：一句我可以直接说出口的第一人称口语回答（不超过40字，像真人说话，不要任何前缀或套话）。\n" +
-          "然后 " + nPoints + " 行要点，每行以「• 」开头，每条不超过30字，具体、有信息量。" + (len === "detailed" ? "其中一条给出一个简短的真实例子。" : "") +
+        fmt = "用中文回答。格式严格如下：\n第1行：一句直接回答问题、我可以马上说出口的第一人称口语（不超过40字，像真人说话，不要任何前缀或套话）。\n" +
+          (para ? "第2行：以「» 」开头，写一段 " + para + " 句的完整口语回答，接着第1行往下说、不要重复第1行，第一人称，可以直接照着说，要有具体事实、数字、做法或原因" + (len === "detailed" ? "，并带一个具体例子" : "") + "。\n" : "") +
+          "然后 " + nPoints + " 行要点，每行以「• 」开头，每条不超过30字：需要记住的关键事实或数字。" +
           "\n不要寒暄、标题或 Markdown 加粗。";
       }
       let strict = "";
@@ -2643,15 +2692,18 @@
         return s.replace(/\*\*/g, "").replace(/^#+\s*/, "").replace(/^(?:[-*•·]|\d+[.)、])\s*/, "")
           .replace(/^(?:第\s*1\s*行[:：]|开口[:：]|回答[:：]|🗣️\s*)/, "").replace(/^["“「]|["”」]$/g, "").trim();
       };
+      const rest = lines.slice(1);
+      const isScript = function (l) { return /^[»>]/.test(l); };
       return {
-        lead: lines.length ? clean(lines[0]) : "",
-        points: lines.slice(1).map(clean).filter(Boolean)
+        lead: lines.length ? clean(lines[0].replace(/^[»>]\s*/, "")) : "",
+        script: rest.filter(isScript).map(function (l) { return clean(l.replace(/^[»>]\s*/, "")); }).join(" "),
+        points: rest.filter(function (l) { return !isScript(l); }).map(clean).filter(Boolean)
       };
     }
 
     function answerPlainText(a) {
       const p = parseAnswer(a.text);
-      return [p.lead].concat(p.points.map(function (x) { return "• " + x; })).join("\n");
+      return [p.lead].concat(p.script ? [p.script] : []).concat(p.points.map(function (x) { return "• " + x; })).join("\n");
     }
 
     function mountAnswer(a) {
@@ -2662,6 +2714,7 @@
       const prepared = a.kind === "answer" ? preparedAnswer(a.hits) : "";
       refs.lead = el("div", { class: "lead" + (prepared ? " prepared" : " placeholder"),
         text: prepared || (a.kind === "summary" ? "正在整理纪要…" : "正在思考…") });
+      refs.script = el("div", { class: "script", hidden: true });
       refs.points = el("ul", { class: "points" + (a.cue ? " cues" : "") });
       refs.raw = el("div", { class: "raw", hidden: true });
       refs.bridge = el("div", { class: "bridge", hidden: true }, el("span", { class: "bridge-tag", text: "先说" }), el("span", { class: "u", text: a.bridge || "" }));
@@ -2727,6 +2780,7 @@
         refs.coach,
         refs.bridge,
         refs.lead,
+        refs.script,
         refs.points,
         refs.raw,
         refs.needsAi,
@@ -2753,6 +2807,9 @@
         const p = parseAnswer(a.text);
         r.lead.classList.remove("placeholder", "prepared");
         r.lead.textContent = p.lead;
+        r.script.hidden = !p.script;
+        r.script.textContent = p.script;
+        r.script.classList.toggle("caret", streaming && Boolean(p.script) && !p.points.length);
         r.points.replaceChildren();
         // Once you start answering, the first point you haven't covered is highlighted as "Next".
         let nextIdx = -1;
@@ -2762,7 +2819,7 @@
         p.points.forEach(function (pt, i) {
           r.points.appendChild(el("li", { class: a.covered && a.covered[i] ? "covered" : (i === nextIdx ? "next" : null), text: pt }));
         });
-        r.lead.classList.toggle("caret", streaming && !p.points.length);
+        r.lead.classList.toggle("caret", streaming && !p.points.length && !p.script);
         const lastLi = r.points.lastChild;
         if (lastLi && streaming) lastLi.classList.add("caret");
       } else if (a.status === "needs-ai") {
@@ -3115,6 +3172,7 @@
     function buildMarkdown() {
       const lines = ["# 对话记录 · " + new Date().toLocaleString(), "", "## 对话"];
       S.utts.forEach(function (u) { lines.push("- **" + whoLabel(u.ch) + "** (" + fmtClock(new Date(u.at)) + ")：" + u.text); });
+      if (S.fullTranscript) lines.push("", "## 完整逐字稿", S.fullTranscript);
       lines.push("", "## 回答");
       S.answers.forEach(function (a) {
         if (!a.text) return;
@@ -3284,6 +3342,7 @@
       if (ev.key === "/") { ev.preventDefault(); $("composerInput").focus(); return; }
       if ((ev.key === "x" || ev.key === "X") && S.current && S.current.auto && S.current.kind === "answer") { ev.preventDefault(); notAQuestion(S.current); return; }
       if ((ev.key === "r" || ev.key === "R") && S.current && S.current.kind === "answer") { ev.preventDefault(); rescue(S.current); return; }
+      if (ev.key === "n" || ev.key === "N") { ev.preventDefault(); newConversation(false); return; }
       const f = FOLLOWUPS.find(function (x) { return x.key === ev.key; });
       if (f && S.current && S.current.kind === "answer") { ev.preventDefault(); followUp(f); }
     }
@@ -3435,7 +3494,7 @@
     if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
       navigator.mediaDevices.addEventListener("devicechange", refreshMicDevices);
     }
-    ["scenarioSel", "langSel", "lengthSel", "bgInput", "chkStrict", "modelInput", "spokenLang", "chkFastMic", "translateSel", "chkLiveStt", "chkCoach", "chkSpec", "chkRecap", "chkSemantic", "chkMemory", "chkContribute", "chkProtect"].forEach(function (id) {
+    ["scenarioSel", "langSel", "lengthSel", "bgInput", "chkStrict", "modelInput", "spokenLang", "chkFastMic", "translateSel", "chkLiveStt", "chkCoach", "chkSpec", "chkRecap", "chkSemantic", "chkMemory", "chkContribute", "chkProtect", "chkRecord", "chkRoles"].forEach(function (id) {
       $(id).addEventListener("change", persistKb);
     });
     $("scenarioSel").addEventListener("change", function () {
@@ -3461,21 +3520,15 @@
     $("btnSummary").addEventListener("click", summarize);
     $("btnReview").addEventListener("click", review);
     $("btnRecap").addEventListener("click", function () { recap(false); });
+    $("btnTranscript").addEventListener("click", function () {
+      if (S.listening) { toast(S.uiLang === "en" ? "Stop listening first; the transcript is made from the recording." : "请先停止收音，逐字稿是根据录音生成的。"); return; }
+      if (!REC.parts.length) { toast(S.uiLang === "en" ? "No recording for this conversation (turn on “Complete transcript after the call” in Settings)." : "这段对话没有录音（在设置里打开「结束后生成完整逐字稿」）。"); return; }
+      fullTranscript();
+    });
     $("btnPrep").addEventListener("click", prepare);
     $("btnExport").addEventListener("click", exportMarkdown);
-    $("btnClear").addEventListener("click", function () {
-      saveSessionLocal();
-      if (S.abort) { try { S.abort.abort(); } catch (_) {} }
-      if (S.autoTimer) clearTimeout(S.autoTimer);
-      Object.keys(sttQueues).forEach(function (k) { sttQueues[k].items.forEach(function (it) { it.text = ""; }); });
-      S.utts.forEach(function (u) { if (u.el) u.el.remove(); });
-      S.utts = []; S.answers = []; S.current = null; S.lastAutoQ = ""; S.sessId = 0;
-      TALK.me = 0; TALK.them = 0; TALK.run = 0; updateTalk();
-      $("answerHost").replaceChildren();
-      $("convoEmpty").hidden = false;
-      $("ready").hidden = S.listening;
-      renderHistory(); renderReady(); refreshStatus();
-    });
+    $("btnClear").addEventListener("click", function () { newConversation(true); });
+    $("btnNew").addEventListener("click", function () { newConversation(false); });
     $("btnFontUp").addEventListener("click", function () { setScale(0.1); });
     $("btnFontDown").addEventListener("click", function () { setScale(-0.1); });
     $("btnFocus").addEventListener("click", function () { document.body.classList.toggle("focus"); });
@@ -3682,6 +3735,7 @@
         turns: S.utts.length,
         answers: S.answers.filter(function (a) { return a.text; }).length,
         metrics: S.lastMetrics || null,
+        transcript: S.fullTranscript || "",
         markdown: buildMarkdown()
       };
       try {
@@ -4112,11 +4166,13 @@
           if (r.isFinal) { S.liveInterim[ch] = ""; addUtterance(ch, r[0].transcript); }
           else interim += r[0].transcript;
         }
+        rec.pendingInterim = interim;
         S.liveInterim[ch] = interim;
         showInterim(interim ? interimPrefix(ch) + interim : "");
         if (interim) maybeSpeculate(ch, interim);
       };
       rec.onend = function () {
+        if ((rec.pendingInterim || "").trim()) { addUtterance(ch, rec.pendingInterim); rec.pendingInterim = ""; }
         if (S.listening && S.trackRecs.indexOf(rec) !== -1 && track.readyState === "live") {
           try { rec.start(track); } catch (_) {}
         }
@@ -4383,6 +4439,7 @@
 
     function attachMeetingStream(spkStream) {
       const audio = spkStream.getAudioTracks();
+      recStart("spk", spkStream);
       {
         const spkEnded = function () { S.spk = null; stopExtPlayback(); refreshStatus(); if (!S.mic && S.listening) stopListening(); };
         const spkSegments = function (st) {
@@ -4778,7 +4835,7 @@
       if (secs > 75) return { c: "bad", t: en ? "Wrap up: one-line summary, then ask what they think." : "该收尾了：一句话总结，再问问对方怎么看。" };
       if (secs > 45) return { c: "warn", t: en ? "Getting long. Start landing your point." : "说得有点长了，准备收个尾。" };
       if (fill >= 3) return { c: "warn", t: en ? "Slow down a touch; fewer “um”s." : "放慢一点，少用「嗯」「那个」。" };
-      if ((isZh && pace > 300) || (!isZh && pace > 190)) return { c: "warn", t: en ? "A bit fast. Pause between points." : "语速有点快，要点之间停一下。" };
+      if (secs >= 6 && ((isZh && pace > 300) || (!isZh && pace > 190))) return { c: "warn", t: en ? "A bit fast. Pause between points." : "语速有点快，要点之间停一下。" };
       if (hedges >= 2) return { c: "warn", t: en ? "Sound more certain: drop “maybe / I guess”." : "说得更肯定些：少用「可能」「大概」。" };
       const next = nextPointText();
       if (a && a.coach && a.coach.add) return { c: "", t: (en ? "Add: " : "补充：") + a.coach.add };
@@ -5115,6 +5172,202 @@
       toast(S.uiLang === "en" ? "Learning reset." : "已重置学习。");
     });
 
+
+    // =====================================================================
+    // 15a6. Speakers, complete transcript, new conversation
+    // =====================================================================
+    function setUttCh(u, ch, manual) {
+      if (!u || u.ch === ch) return;
+      if (u.ch === "mic" && ch !== "mic") { TALK.me = Math.max(0, TALK.me - u.text.length); TALK.them += u.text.length; }
+      else if (u.ch !== "mic" && ch === "mic") { TALK.them = Math.max(0, TALK.them - u.text.length); TALK.me += u.text.length; }
+      u.ch = ch;
+      if (manual) u.locked = true;
+      if (u.el) {
+        u.el.className = "utt " + whoClass(ch) + (u.el.classList.contains("answered") ? " answered" : "") + " relabeled";
+        const w = u.el.querySelector(".who");
+        if (w) w.textContent = whoLabel(ch);
+      }
+      updateTalk();
+    }
+    function flipSpeaker(u) {
+      const toMe = u.ch !== "mic";
+      setUttCh(u, toMe ? "mic" : "spk", true);
+      if (!toMe && isQuestion(u.text)) toast(S.uiLang === "en" ? "Marked as them. Tap the line to answer it." : "已改为「对方」。点这句可以让 Cue 回答。");
+    }
+
+    // ---- Mic-only: label who said what from the content (measured ~0.6–1 s, 8/8 correct on a test dialogue) ----
+    const ROLES = { timer: null, busy: false };
+    function scheduleRoles() {
+      if (!$("chkRoles").checked || S.spk || !aiReady()) return;
+      clearTimeout(ROLES.timer);
+      ROLES.timer = setTimeout(runRoles, 1200);
+    }
+    async function runRoles() {
+      if (ROLES.busy) { scheduleRoles(); return; }
+      const recent = S.utts.slice(-10);
+      if (!recent.some(function (u) { return u.ch === "room" && !u.locked; })) return;
+      ROLES.busy = true;
+      const bg = $("bgInput").value.trim().slice(0, 600);
+      const docs = S.docs.filter(function (d) { return d.name !== MEMORY_DOC; }).map(function (d) { return d.name; }).slice(0, 6).join("、");
+      const lines = recent.map(function (u, i) { return (i + 1) + ". " + u.text.slice(0, 300); }).join("\n");
+      let out = "";
+      try {
+        await streamAnswer(
+          "You label who said each line of a live conversation transcript. ME is the app's user: usually the one being asked questions and answering, " +
+          "using their own materials (described below). OTHER is anyone else. All lines came from one microphone, so speakers are mixed. " +
+          "Use content and flow: questions put to ME, answers stating ME's facts, how turns alternate. " +
+          "Reply with JSON only: {\"labels\": [\"ME\" or \"OTHER\", ...]} with exactly one label per numbered line, in order.",
+          "[About ME]\n" + (bg || "(no background)") + (docs ? "\nME's materials: " + docs : "") + "\n\n[Transcript]\n" + lines,
+          new AbortController().signal, function (d) { out += d; });
+        const m = out.match(/\{[\s\S]*\}/);
+        const labels = m ? (JSON.parse(m[0]).labels || []) : [];
+        if (labels.length === recent.length) {
+          recent.forEach(function (u, i) {
+            if (u.locked || (u.ch !== "room" && !u.autoRole)) return;
+            const ch = labels[i] === "ME" ? "mic" : "spk";
+            if (u.ch !== ch) { setUttCh(u, ch, false); u.autoRole = true; }
+          });
+        }
+      } catch (_) { /* labels stay as they are */ }
+      ROLES.busy = false;
+    }
+
+    // ---- Recording (memory only) → complete transcript after the call ----
+    const REC = { parts: [], live: {} };
+    function recStart(ch, stream) {
+      if (!$("chkRecord").checked || !window.MediaRecorder || REC.live[ch]) return;
+      const mime = ["audio/webm;codecs=opus", "audio/ogg;codecs=opus", "audio/mp4"].find(function (m) { return MediaRecorder.isTypeSupported(m); }) || "";
+      const astream = new MediaStream(stream.getAudioTracks());
+      const st = { stopped: false, rec: null, timer: null };
+      REC.live[ch] = st;
+      const begin = function () {
+        let rec;
+        try { rec = new MediaRecorder(astream, mime ? { mimeType: mime, audioBitsPerSecond: 32000 } : { audioBitsPerSecond: 32000 }); }
+        catch (_) { delete REC.live[ch]; return; }
+        const chunks = [], t0 = Date.now();
+        rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+        rec.onstop = function () {
+          if (chunks.length) REC.parts.push({ ch: ch, blob: new Blob(chunks, { type: rec.mimeType || mime || "audio/webm" }), t0: t0, t1: Date.now() });
+          if (!st.stopped && astream.getAudioTracks().some(function (t) { return t.readyState === "live"; })) begin();
+          else {
+            if (REC.live[ch] === st) delete REC.live[ch];
+            if (st.done) st.done();
+          }
+        };
+        rec.start(1000);
+        st.rec = rec;
+        // Start a fresh file every 5 minutes so each piece is small enough to transcribe on its own.
+        st.timer = setTimeout(function () { try { rec.stop(); } catch (_) {} }, 5 * 60 * 1000);
+      };
+      begin();
+    }
+    function recStopAll() {
+      const list = Object.keys(REC.live).map(function (ch) {
+        const st = REC.live[ch];
+        delete REC.live[ch];
+        return new Promise(function (resolve) {
+          st.stopped = true;
+          clearTimeout(st.timer);
+          st.done = resolve;
+          try { if (st.rec && st.rec.state !== "inactive") st.rec.stop(); else resolve(); } catch (_) { resolve(); }
+          setTimeout(resolve, 3000);
+        });
+      });
+      return Promise.all(list);
+    }
+    async function transcribePart(part, hasBoth) {
+      const b64 = bufToBase64(await part.blob.arrayBuffer());
+      const mime = (part.blob.type || "audio/webm").split(";")[0];
+      const bg = $("bgInput").value.trim().slice(0, 500);
+      const who = hasBoth ? (part.ch === "mic" ? "ME" : "OTHER") : "";
+      const instruction = "Transcribe this recording completely and verbatim, in the language(s) actually spoken. Never translate, summarise or skip words. " +
+        "One line per speaker turn, formatted as [mm:ss] SPEAKER: text, where mm:ss is the time from the start of this recording. " +
+        (who ? "Everything here is spoken by " + who + "; use " + who + " as SPEAKER on every line."
+             : "SPEAKER is ME for the app's user (usually the one answering questions" + (bg ? "; about them: " + bg : "") + ") and OTHER for anyone else; decide from voice and content.") +
+        " Output only the lines.";
+      if (S.keys.gemini) {
+        const resp = await geminiFetch(GEMINI_STT_MODEL, "generateContent", {
+          contents: [{ role: "user", parts: [{ inlineData: { mimeType: mime, data: b64 } }, { text: instruction }] }],
+          generationConfig: { temperature: 0, maxOutputTokens: 8192 }
+        }, timeoutSignal(120000));
+        if (!resp.ok) throw apiError("Gemini 转写", resp.status, await errDetail(resp));
+        const data = await resp.json();
+        return ((((data.candidates || [])[0] || {}).content || {}).parts || []).map(function (p) { return p.thought ? "" : (p.text || ""); }).join("");
+      }
+      if (S.keys.cue) {
+        const r = await cueFetch("/v1/transcribe", { audio: b64, mime: mime, instruction: instruction, long: true }, timeoutSignal(120000));
+        return (await r.json()).text || "";
+      }
+      throw new Error(S.uiLang === "en" ? "Needs a Gemini key or Cue Cloud" : "需要 Gemini Key 或 Cue 云端");
+    }
+    async function fullTranscript() {
+      const parts = REC.parts.slice().sort(function (a, b) { return a.t0 - b.t0; });
+      if (!parts.length) return;
+      const box = $("transcriptCard");
+      const en = S.uiLang === "en";
+      const origin = parts[0].t0;
+      const mins = Math.max(1, Math.round((Math.max.apply(null, parts.map(function (p) { return p.t1; })) - origin) / 60000));
+      const body = el("div", { class: "tx-body u", text: en ? "Transcribing the recording…" : "正在根据录音重新转写…" });
+      box.replaceChildren(el("div", { class: "stats-title" }, (en ? "Complete transcript · " : "完整逐字稿 · ") + mins + (en ? " min" : " 分钟"),
+        el("span", { text: en ? "Speaker labels are inferred" : "说话人为自动判断，可能有误" })), body);
+      box.hidden = false;
+      const hasBoth = parts.some(function (p) { return p.ch === "spk"; }) && parts.some(function (p) { return p.ch === "mic"; });
+      const rows = [];
+      let failed = 0;
+      for (let i = 0; i < parts.length; i++) {
+        body.textContent = (en ? "Transcribing part " : "正在转写第 ") + (i + 1) + " / " + parts.length + (en ? "…" : " 段…");
+        try {
+          const txt = await transcribePart(parts[i], hasBoth);
+          txt.split("\n").forEach(function (line) {
+            const m = line.trim().match(/^\[?(\d{1,2}):(\d{2})\]?\s*(ME|OTHER|我|对方)\s*[:：]\s*(.+)$/i);
+            if (!m) { if (line.trim()) rows.push({ t: parts[i].t0 - origin, who: parts[i].ch === "spk" ? "OTHER" : "ME", text: line.trim() }); return; }
+            rows.push({ t: parts[i].t0 - origin + (parseInt(m[1], 10) * 60 + parseInt(m[2], 10)) * 1000, who: /ME|我/i.test(m[3]) ? "ME" : "OTHER", text: m[4].trim() });
+          });
+        } catch (e) { failed++; rows.push({ t: parts[i].t0 - origin, who: "", text: (en ? "[this part failed: " : "［这一段转写失败：") + errMsg(e) + (en ? "]" : "］") }); }
+      }
+      rows.sort(function (a, b) { return a.t - b.t; });
+      const fmt = function (ms) { const sec = Math.round(ms / 1000); return String(Math.floor(sec / 60)).padStart(2, "0") + ":" + String(sec % 60).padStart(2, "0"); };
+      const label = function (w) { return w === "ME" ? (en ? "Me" : "我") : (w === "OTHER" ? (en ? "Them" : "对方") : ""); };
+      S.fullTranscript = rows.map(function (r) { return "[" + fmt(r.t) + "] " + (label(r.who) ? label(r.who) + (en ? ": " : "：") : "") + r.text; }).join("\n");
+      body.replaceChildren();
+      rows.forEach(function (r) {
+        body.appendChild(el("div", null, el("b", { text: "[" + fmt(r.t) + "] " + (label(r.who) ? label(r.who) + (en ? ": " : "：") : "") }), r.text));
+      });
+      const actions = el("div", { class: "row", style: "margin-top: 10px; gap: 6px;" },
+        el("button", { class: "chip", type: "button", text: en ? "Copy" : "复制", onclick: function () { if (navigator.clipboard) navigator.clipboard.writeText(S.fullTranscript).catch(function () {}); } }),
+        el("button", { class: "chip", type: "button", text: en ? "Download .txt" : "下载 .txt", onclick: function () { downloadText(S.fullTranscript, "cue-transcript-" + new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-") + ".txt"); } }));
+      box.appendChild(actions);
+      if (failed) toast(en ? failed + " part(s) couldn't be transcribed." : failed + " 段没能转写。");
+      lastSavedSig = "";
+      saveSessionLocal();
+    }
+
+    // ---- New conversation: save this one, start clean (keeps listening if you are) ----
+    function newConversation(fromTrash) {
+      const had = S.utts.length > 0;
+      if (S.current) commitMemory(S.current);
+      flushContributions();
+      if (had) saveSessionLocal();
+      if (S.abort) { try { S.abort.abort(); } catch (_) {} }
+      if (S.autoTimer) clearTimeout(S.autoTimer);
+      Object.keys(sttQueues).forEach(function (k) { sttQueues[k].items.forEach(function (it) { it.text = ""; }); });
+      S.utts.forEach(function (u) { if (u.el) u.el.remove(); });
+      S.utts = []; S.answers = []; S.current = null; S.lastAutoQ = ""; S.sessId = 0; S.fullTranscript = "";
+      TALK.me = 0; TALK.them = 0; TALK.run = 0; TALK.fill = 0; TALK.nudged = false; TALK.fillNudged = false; updateTalk();
+      HUD.maxTurn = 0; hudReset();
+      SPEC.sHit = 0; SPEC.sMiss = 0;
+      REC.parts = [];
+      $("answerHost").replaceChildren();
+      $("statsCard").hidden = true;
+      $("transcriptCard").hidden = true;
+      $("convoEmpty").hidden = false;
+      $("ready").hidden = S.listening;
+      if (S.listening) S.startedAt = Date.now();
+      renderHistory(); renderReady(); refreshStatus();
+      if (had) toast(S.uiLang === "en" ? "New conversation. The previous one is saved in History." : "已开始新对话，上一段已存进「记录」。");
+    }
+    $("srcHintAdd").addEventListener("click", function () { $("btnAddTab").click(); });
+
     // =====================================================================
     // 15c. Interface language (中文 / English)
     // UI strings are written in Chinese; in English mode every visible UI text node and
@@ -5306,6 +5559,20 @@
       ["正在评估…", "Evaluating…"], ["评估失败：", "Evaluation failed: "], ["得分 ", "Score "], ["已评估", "Evaluated"],
       ["这个浏览器不支持语音识别：请在设置里填 Gemini Key，或直接打字。", "This browser has no speech recognition: add a Gemini key in Settings, or type."],
       ["练习 · ", "Practice · "],
+      ["新对话", "New"], ["保存当前对话，开始一段新的（N）", "Save this conversation and start a new one (N)"],
+      ["完整逐字稿", "Full transcript"], ["用录音重新生成每一个字都在的逐字稿，并标出说话人", "Re-transcribe the recording word for word, with speakers"],
+      ["结束后生成完整逐字稿", "Complete transcript after the call"],
+      ["通话中在内存里保留压缩录音，停止后重新转写一遍，每一个字都在，并标出说话人。录音不会保存到硬盘，开始新对话或关闭页面即删除。", "Keeps a compressed recording in memory during the call and re-transcribes it when you stop, so every word is there, with speakers. Never written to disk; deleted when you start a new conversation or close the page."],
+      ["自动分清我和对方（只用麦克风时）", "Tell me and them apart automatically (mic only)"],
+      ["根据说话内容和你的资料判断每句话是谁说的（约 1 秒后更新标签）。点句子前面的「我 / 对方」可以手动改。线上会议最准的方式仍是「＋ 会议声音」。", "Works out who said each line from the content and your materials (labels update about a second later). Tap “Me / Them” on a line to fix it. For online calls, “+ Meeting audio” is the most accurate."],
+      ["点一下切换：我 / 对方", "Tap to switch: me / them"],
+      ["线上会议？点顶部「＋ 会议声音」，就能百分之百分清你和对方。", "On a call? Tap “+ Meeting audio” at the top to tell you and them apart reliably."],
+      ["现在添加", "Add now"],
+      ["没有 Gemini Key 时用浏览器识别麦克风", "Use the browser recognizer for the mic when there's no Gemini key"],
+      ["有 Gemini Key（或 Cue 云端）时自动改用 Gemini Live：中英文都能识别、不丢字。没有时用浏览器自带识别，一次只能识别一种语言。", "With a Gemini key (or Cue Cloud), Gemini Live is used instead: Chinese and English, no dropped words. Without one, the browser recognizer handles one language at a time."],
+      ["简短 · 一句话 + 2 个要点", "Brief · one line + 2 points"],
+      ["标准 · 一句话 + 一段完整说法 + 3 个要点", "Standard · one line + a full spoken answer + 3 points"],
+      ["详细 · 更完整的说法（含例子）+ 4–5 个要点", "Detailed · a longer spoken answer with an example + 4–5 points"],
       ["Cue 云端", "Cue Cloud"], ["用邀请码，不需要自己的 Key", "Use an invite code; no API key of your own"],
       ["粘贴邀请码（格式：cue_…@服务器地址）。", "Paste your invite code (format: cue_…@server)."],
       ["Cue 云端 · Gemini Live 流式识别（支持麦克风和电脑声音）", "Cue Cloud · Gemini Live streaming (mic and computer audio)"],
