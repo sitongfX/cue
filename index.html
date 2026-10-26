@@ -319,7 +319,8 @@
     .q-tag { flex-shrink: 0; font-size: 11px; font-weight: 600; color: var(--them); background: var(--them-soft); border-radius: 6px; padding: 2px 7px; margin-top: 2px; }
     .q-text { color: var(--text-2); font-size: 14px; }
     .kb { margin-top: 16px; border-left: 2px solid var(--accent); background: var(--accent-soft); border-radius: 0 10px 10px 0; padding: 10px 14px; font-size: 13px; }
-    .kb summary { cursor: pointer; color: var(--accent); font-weight: 600; font-size: 12.5px; list-style: none; display: flex; gap: 8px; align-items: center; }
+    .kb summary { cursor: pointer; color: var(--accent); font-weight: 600; font-size: 12.5px; list-style: none; display: flex; gap: 8px; align-items: center; min-width: 0; }
+    .kb summary .kb-src { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .kb summary::-webkit-details-marker { display: none; }
     .kb summary .kb-src { color: var(--muted); font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .kb-snip { margin-top: 8px; color: var(--text-2); white-space: pre-wrap; line-height: 1.6; }
@@ -917,7 +918,7 @@
             <input class="input" id="keyInput" type="password" placeholder="粘贴任意 API Key，自动识别是哪家服务" autocomplete="off" />
             <button class="btn btn-primary" id="btnSaveKey" type="button">保存</button>
           </div>
-          <span class="help" id="keyHelp">支持 Gemini、硅基流动、DeepSeek、智谱、通义千问，粘贴后自动识别。</span>
+          <span class="help" id="keyHelp">支持 Gemini、OpenAI、Claude、Deepgram（英文转写）、硅基流动、DeepSeek、智谱、通义千问，粘贴后自动识别。</span>
           <label class="row" style="gap: 6px; font-size: 13px; color: var(--text-2); margin-top: 6px;"><input id="chkRememberKey" type="checkbox" style="width: 18px; height: 18px; accent-color: var(--accent);" /> 在这个浏览器记住 Key（加密保存，取消勾选即删除）</label>
         </div>
         <div class="field">
@@ -1364,6 +1365,8 @@
 
     const S = {
       convGen: 0,
+      stopGen: 0,
+      stopping: null,
       lastInterimAt: {},
       provider: "gemini",
       model: PROVIDERS.gemini.model,
@@ -1790,7 +1793,7 @@
       if (!S.detecting) {
         $("keyHelp").textContent = S.keys[S.provider]
           ? "当前使用：" + p.name + "（" + maskKey(S.keys[S.provider]) + "）。粘贴新的 Key 会自动识别并切换。"
-          : "支持 Gemini、硅基流动、DeepSeek、智谱、通义千问，粘贴后自动识别。";
+          : "支持 Gemini、OpenAI、Claude、Deepgram（英文转写）、硅基流动、DeepSeek、智谱、通义千问，粘贴后自动识别。";
       }
       if (document.activeElement !== $("modelInput")) $("modelInput").value = S.model;
       const ready = aiReady();
@@ -1827,10 +1830,10 @@
 
     function sttLabel() {
       const r = sttRoute();
+      if (typeof dgUsable === "function" && dgUsable()) return "Deepgram Nova-3 实时转写（英文，最快）";
       if (r === "siliconflow") return "硅基流动 SenseVoice（云端，支持麦克风和电脑声音）";
       if (r === "gemini") return liveSttUsable() ? "Gemini Live 流式识别（最快，支持麦克风和电脑声音，中英文自动识别）" : "Gemini（云端，支持麦克风和电脑声音）";
       if (r === "server") return "本机服务转写（支持麦克风和电脑声音）";
-      if (dgUsable()) return "Deepgram Nova-3 实时转写（英文，最快）";
       if (r === "cue") return liveSttUsable() ? "Cue 云端 · Gemini Live 流式识别（支持麦克风和电脑声音）" : "Cue 云端转写（支持麦克风和电脑声音）";
       if (trackRecognitionUsable()) return "浏览器内置识别（麦克风和电脑声音都可以，免 Key；电脑声音为实验功能）";
       return "浏览器内置识别（只能识别麦克风）。要转写电脑里对方的声音，请填 Gemini 或硅基流动的 Key。";
@@ -1862,7 +1865,7 @@
         setStep("stepAudio", "warn", "这个网站不允许网页用麦克风 · 点「开始」查看换哪个地址打开，或先用左下角打字提问");
       } else if (!window.isSecureContext || !navigator.mediaDevices) {
         setStep("stepAudio", "warn", "当前网址不能使用麦克风 · 点「开始」查看解决办法，或先用左下角打字提问");
-      } else if (S.source !== "inperson" && sttRoute() === "browser" && !trackRecognitionUsable()) {
+      } else if (S.source !== "inperson" && sttRoute() === "browser" && !trackRecognitionUsable() && !dgUsable()) {
         setStep("stepAudio", "warn", SOURCES[S.source] + " · 转写电脑声音需要 Gemini 或硅基流动 Key");
       } else {
         setStep("stepAudio", "done", SOURCES[S.source]);
@@ -2074,7 +2077,7 @@
       let changed = false;
       points.forEach(function (pt, i) {
         if (a.covered[i]) return;
-        const keys = (pt.toLowerCase().match(/[a-z0-9.%]{2,}|[\u4e00-\u9fff]{2}/g) || []);
+        const keys = (stripCites(pt).toLowerCase().match(/[a-z0-9.%]{2,}|[\u4e00-\u9fff]{2}/g) || []);
         if (keys.length < 2) return;
         const hit = keys.filter(function (k) { return said.indexOf(k) !== -1; }).length;
         if (hit / keys.length >= 0.45) { a.covered[i] = true; changed = true; }
@@ -2405,6 +2408,7 @@
       if (S.starting || S.listening) return;
       S.starting = true;
       $("btnStart").disabled = true;
+      if (S.stopping) { try { await S.stopping; } catch (_) {} S.stopping = null; S.stopGen++; }
       try { await startListeningInner(); } finally {
         S.starting = false;
         $("btnStart").disabled = false;
@@ -2478,9 +2482,9 @@
           };
           if (dgUsable()) S.fastMic = false;
           S.mic = dgUsable()
-            ? createDeepgramTranscriber(ch, ms, $("meterMic"), micEnded, function (st) { S.mic = micLive(st); })
+            ? createDeepgramTranscriber(ch, ms, $("meterMic"), micEnded, function (st) { S.mic = micLive(st); if (!liveSttUsable() && sttRoute() === "browser") startRecognition(ch); })
             : ((!S.fastMic && liveSttUsable()) ? micLive(ms) : micSegments(ms));
-          if (sttRoute() === "browser" || S.fastMic) startRecognition(ch);
+          if (!dgUsable() && (sttRoute() === "browser" || S.fastMic)) startRecognition(ch);
           else if (S.mic && S.mic.live && hintUsable() && !dgUsable()) startHint(ch);
         } catch (e) {
           openMicDialog(e);
@@ -2590,11 +2594,16 @@
       showInterim("");
       refreshStatus();
       const gen = S.convGen;
-      Promise.all(finishing).then(function () {
+      const tok = ++S.stopGen;
+      S.stopping = Promise.all(finishing);
+      S.stopping.then(function () {
+        if (tok !== S.stopGen || S.listening) return null;
         // Label any lines still marked "room" before the stats are computed.
         clearTimeout(ROLES.timer);
         return ($("chkRoles").checked && !S.spk && aiReady() && S.utts.some(function (u) { return u.ch === "room"; })) ? runRoles() : null;
       }).then(function () {
+        if (tok === S.stopGen) S.stopping = null;
+        if (tok !== S.stopGen || S.listening) return;
         S.liveInterim = {};
         showInterim("");
         if (gen !== S.convGen) return;
@@ -2652,6 +2661,21 @@
       const t = convoSample();
       const zh = (t.match(/[\u4e00-\u9fff]/g) || []).length, en = (t.match(/[a-z]+/gi) || []).length;
       return zh > en ? "zh" : "en";
+    }
+    // Majority vote between Chinese characters and Latin words; "" when there's no text.
+    function majorityLang(t) {
+      const zh = (String(t).match(/[\u4e00-\u9fff]/g) || []).length, en = (String(t).match(/[a-z]+/gi) || []).length;
+      if (!zh && !en) return "";
+      return zh > en ? "zh" : "en";
+    }
+    function contentLang(sample) {
+      const v = $("langSel").value;
+      if (v !== "auto") return v;
+      return majorityLang(sample) || majorityLang(convoSample()) || (S.uiLang === "en" ? "en" : "zh");
+    }
+    function materialsText(limit) {
+      return S.docs.filter(function (d) { return d.name !== PREP_DOC && d.name !== MEMORY_DOC; })
+        .map(function (d) { return d.text; }).join("\n").slice(0, limit);
     }
     function langName(l) { return l === "zh" ? "Simplified Chinese" : "English"; }
     const SPOKEN_EN = "Sound like a confident professional talking, not writing: short sentences, contractions (we're, it's, that's), plain everyday words. " +
@@ -2802,9 +2826,10 @@
       await readStream(resp, function (line) {
         if (line.indexOf("data:") !== 0) return;
         try {
-          const d = JSON.parse(line.slice(5));
-          if (d.type === "content_block_delta" && d.delta && d.delta.text) onDelta(d.delta.text);
-        } catch (_) {}
+          var d = JSON.parse(line.slice(5));
+        } catch (_) { return; }
+        if (d.type === "error") throw new Error("Claude: " + ((d.error || {}).message || "error"));
+        if (d.type === "content_block_delta" && d.delta && d.delta.text) onDelta(d.delta.text);
       });
     }
     async function streamOpenAI(url, key, model, sys, user, signal, onDelta) {
@@ -2814,7 +2839,10 @@
         body: JSON.stringify({ model: model, stream: true, temperature: 0.4, max_tokens: 900,
           messages: [{ role: "system", content: sys }, { role: "user", content: user }] })
       });
-      if (!resp.ok || !resp.body) throw apiError(PROVIDERS[S.provider].name, resp.status, await errDetail(resp));
+      if (!resp.ok || !resp.body) {
+        const pn = Object.keys(PROVIDERS).find(function (k) { return PROVIDERS[k].url === url; });
+        throw apiError(pn ? PROVIDERS[pn].name : PROVIDERS[S.provider].name, resp.status, await errDetail(resp));
+      }
       await readStream(resp, function (line) {
         if (line.indexOf("data:") !== 0) return;
         const d = line.slice(5).trim();
@@ -2834,7 +2862,10 @@
           options: { num_ctx: 4096, num_predict: 420, temperature: 0.4 },
           messages: [{ role: "system", content: sys }, { role: "user", content: user }] })
       });
-      if (!resp.ok || !resp.body) throw apiError(PROVIDERS[S.provider].name, resp.status, await errDetail(resp));
+      if (!resp.ok || !resp.body) {
+        const pn = Object.keys(PROVIDERS).find(function (k) { return PROVIDERS[k].url === url; });
+        throw apiError(pn ? PROVIDERS[pn].name : PROVIDERS[S.provider].name, resp.status, await errDetail(resp));
+      }
       await readStream(resp, function (line) {
         try {
           const j = JSON.parse(line);
@@ -2928,7 +2959,7 @@
       let prevLead = "";
       if (!prepared && a.kind === "answer" && !a.text) {
         const prev = S.answers.slice().reverse().find(function (x) { return x !== a && x.kind === "answer" && x.text && sameQuestion(x.question, a.question); });
-        if (prev) prevLead = parseAnswer(prev.text).lead;
+        if (prev) prevLead = stripCites(parseAnswer(prev.text).lead);
       }
       refs.lead = el("div", { class: "lead" + (prepared ? " prepared" : (prevLead ? " prepared prev" : " placeholder")),
         text: prepared || prevLead || (a.kind === "summary" ? "正在整理纪要…" : "正在思考…") });
@@ -3030,7 +3061,7 @@
         r.lead.classList.remove("placeholder", "prepared", "prev");
         setCited(r.lead, p.lead, a, false);
         r.script.hidden = !p.script;
-        setCited(r.script, p.script, a, true);
+        setCited(r.script, p.script, a, !streaming);
         r.script.classList.toggle("caret", streaming && Boolean(p.script) && !p.points.length);
         r.points.replaceChildren();
         // Once you start answering, the first point you haven't covered is highlighted as "Next".
@@ -3101,7 +3132,7 @@
       const past = S.answers.filter(function (a) { return a !== S.current && (a.text || a.hits.length); }).slice(-12).reverse();
       $("historyWrap").hidden = !past.length;
       past.forEach(function (a) {
-        const p = parseAnswer(a.text || "");
+        const p = parseAnswer(stripCites(a.text || ""));
         list.appendChild(el("button", { class: "hist-item", type: "button", onclick: function () { showAnswer(a); } },
           el("span", { class: "hist-q u", text: a.question }),
           el("span", { class: "hist-a", text: p.lead || (a.hits[0] ? a.hits[0].text.slice(0, 80) : "") })));
@@ -3125,7 +3156,7 @@
       S.current = a;
       $("listenHint").hidden = true;
       if (a && a.kind === "recap") updatePostTabs("recap");
-      else if (!$("postTabs").hidden) selectPost("recap", false);
+      else if (!$("postTabs").hidden) updatePostTabs("recap");
       mountAnswer(a);
       renderHistory();
       $("stage").scrollTop = 0;
@@ -3202,7 +3233,7 @@
       refreshStatus();
       const t0 = performance.now();
       try {
-        const runner = a.kind === "answer" && !opts.system ? streamRace : streamAnswer;
+        const runner = a.kind === "answer" && !opts.system && !opts.spec ? streamRace : streamAnswer;
         await runner(opts.system || systemText(q), opts.user || userText(q, a.hits, extra), ctl.signal, function (delta) {
           if (!a.ttft) { a.ttft = performance.now() - t0; a.firstAt = Date.now(); }
           a.text += delta;
@@ -3263,7 +3294,7 @@
         system: "You are my pre-meeting coach. Scenario: " + scen + ". From my materials and the context, predict the 8 questions the other side is most likely to ask " +
           "(easy to hard, including 2 tough ones) and write my best answer to each.\nUse exactly this format, blank line between pairs:\nQ: question\n" +
           "A: first-person spoken answer, 2-3 sentences, using facts and numbers from my materials; never invent any.\nOutput nothing else. Write the questions and answers in " +
-          langName(outLang(mats + " " + $("ctxTopic").value)) + "; keep the \"Q:\" and \"A:\" labels.",
+          langName(contentLang(materialsText(4000) + " " + $("ctxWho").value + " " + $("ctxTopic").value)) + "; keep the \"Q:\" and \"A:\" labels.",
         user: (ctxBlock() ? ctxBlock() + "\n\n" : "") + "[My materials]\n" + (mats || "(none yet; use the context above)"),
         onDone: function (a) {
           S.prepSig = prepSignature();
@@ -3277,7 +3308,8 @@
     function review() {
       if (S.utts.length < 2) { toast("对话太少，还没法复盘。"); return; }
       if (!aiReady()) { toast("复盘需要先设置 AI 模型。"); openDrawer("model"); return; }
-      const transcript = S.utts.slice(-80).map(function (u) { return whoLabel(u.ch) + "：" + u.text; }).join("\n");
+      const enT = convoLang() === "en";
+      const transcript = S.utts.slice(-80).map(function (u) { return enT ? whoEn(u.ch) + ": " + u.text : whoLabel(u.ch) + "：" + u.text; }).join("\n");
       const mats = materialsDigest(3000);
       answer("会后复盘", {
         kind: "review",
@@ -3556,7 +3588,7 @@
       $("keyInput").value = "";
       warmedAt = 0;
       setTimeout(warmUp, 50);
-      if (S.server.ok && p !== "ollama") {
+      if (S.server.ok && ["gemini", "deepseek", "siliconflow", "zhipu", "qwen"].indexOf(p) !== -1) {
         const body = p === "gemini" ? { gemini_api_key: val } : { deepseek_api_key: val, provider: p };
         fetch(localUrl("/api/config"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
           .then(function () { probe(); }).catch(function () {});
@@ -3626,7 +3658,7 @@
         ev.preventDefault(); target.blur(); answerLatest(); return;
       }
       if (typing || ev.metaKey || ev.ctrlKey || ev.altKey) return;
-      if ($("insecureDialog").open || $("micDialog").open || $("drawer").classList.contains("open")) return;
+      if (document.querySelector("dialog[open]") || $("drawer").classList.contains("open")) return;
       if (ev.code === "Space") { ev.preventDefault(); answerLatest(); return; }
       if (ev.key === "/") { ev.preventDefault(); $("composerInput").focus(); return; }
       if ((ev.key === "x" || ev.key === "X") && S.current && S.current.auto && S.current.kind === "answer") { ev.preventDefault(); notAQuestion(S.current); return; }
@@ -3754,7 +3786,14 @@
         const data = JSON.parse(await f.text());
         let n = 0;
         if (Array.isArray(data.docs)) {
-          data.docs.forEach(function (d) { if (d && addDoc(d.name, d.text)) n++; });
+          data.docs.forEach(function (d) {
+            if (!d || typeof d.name !== "string" || typeof d.text !== "string" || !d.text.trim()) return;
+            const title = d.name.trim() || ("资料 " + (S.docs.length + 1));
+            S.docs = S.docs.filter(function (x) { return x.name !== title; });
+            S.docs.push({ name: title, text: d.text.replace(/\r\n?/g, "\n").trim().slice(0, 200000) });
+            n++;
+          });
+          if (n) { rebuildChunks(); renderDocs(); renderReady(); persistKb(); }
         } else {
           const obj = data.docs || data;
           Object.keys(obj).forEach(function (k) { if (typeof obj[k] === "string" && addDoc(k, obj[k])) n++; });
@@ -3771,6 +3810,7 @@
         if (data.settings && typeof data.settings === "object") { applySettings(data.settings); persistKb(); }
         if (data.learn && data.learn.w && typeof data.learn.w === "object") {
           LEARN = Object.assign({ w: {}, b: -1.1, n: 0, pos: 0, neg: 0, style: { "1": 0, "2": 0, "3": 0, "4": 0 }, spec: { hit: 0, miss: 0 } }, data.learn);
+          RACE.stats = (LEARN.speed && typeof LEARN.speed === "object") ? LEARN.speed : {};
           learnSave();
         }
         toast((S.uiLang === "en" ? "Imported " + n + " materials, " + ns + " conversations" : "已导入 " + n + " 份资料、" + ns + " 场对话") + (data.learn ? (S.uiLang === "en" ? " and learning data." : "，含学习记录。") : "。"));
@@ -4134,7 +4174,7 @@
       stopPracRecording();
       if (window.speechSynthesis) speechSynthesis.cancel();
       const scen = $("scenarioSel").options[$("scenarioSel").selectedIndex].textContent;
-      const lang = langName(outLang(materialsDigest(400) + " " + convoSample()));
+      const lang = langName(contentLang(materialsText(3000) + " " + convoSample()));
       const mats = materialsDigest(5000);
       const bg = $("bgInput").value.trim();
       $("pracAnswer").value = "";
@@ -4371,13 +4411,14 @@
       const queue = [];
       const prov = { utts: [], committed: 0, start: 0 };
       let finishWaiter = null;
-      let lastVoiceAt = 0, voiceStartAt = 0, lastTextAt = Date.now();
+      let lastVoiceAt = 0, voiceStartAt = 0, lastTextAt = Date.now(), stallTicks = 0;
       // Watchdog: someone is clearly talking but Gemini hasn't returned any words for a while.
       const watchdog = setInterval(function () {
         if (stopped) { clearInterval(watchdog); return; }
         const now = Date.now();
         const stalled = ready && now - lastVoiceAt < 600 && now - Math.max(lastTextAt, voiceStartAt) > 3500;
-        if (stalled && !STT_STALL[ch]) { STT_STALL[ch] = true; onSttStall(ch, true); }
+        stallTicks = stalled ? stallTicks + 1 : 0;
+        if (stallTicks >= 2 && !STT_STALL[ch]) { STT_STALL[ch] = true; onSttStall(ch, true); }
       }, 1000);
 
       function send(b64) {
@@ -4506,6 +4547,7 @@
 
       function teardown(stopTracks) {
         stopped = true;
+        if (STT_STALL[ch]) { STT_STALL[ch] = false; if (typeof HINT !== "undefined" && HINT.ch === ch) HINT.promoted = false; }
         try { if (ws) ws.close(); } catch (_) {}
         if (S.liveRecon && S.liveRecon[ch]) { S.liveRecon[ch] = false; refreshStatus(); }
         try { proc.disconnect(); src.disconnect(); mute.disconnect(); } catch (_) {}
@@ -4523,7 +4565,7 @@
         return new Promise(function (resolve) {
           if (stopped) { resolve(); return; }
           let timer = null;
-          const done = function () { finishWaiter = null; clearTimeout(timer); stop(); resolve(); };
+          const done = function () { finishWaiter = null; clearTimeout(timer); teardown(true); resolve(); };
           finishWaiter = done;
           timer = setTimeout(function () {
             const pend = (S.liveInterim[ch] || "").trim();
@@ -4788,6 +4830,17 @@
         .map(function (x) { return x.trim(); }).filter(Boolean);
     }
     function lastSentence(t) { const p = splitSentences(t); return p.length ? p[p.length - 1] : ""; }
+    // Symmetric similarity: short words like "OK" don't match a whole sentence.
+    function sameText(a, b) {
+      const x = String(a).replace(/[\s.,!?;:，。！？；：]+/g, "").toLowerCase(), y = String(b).replace(/[\s.,!?;:，。！？；：]+/g, "").toLowerCase();
+      if (!x || !y) return false;
+      if (Math.min(x.length, y.length) / Math.max(x.length, y.length) < 0.6) return false;
+      const grams = function (t) { const set = new Set(); for (let i = 0; i + 1 < t.length; i++) set.add(t.slice(i, i + 2)); return set; };
+      const A = grams(x), B = grams(y);
+      let inter = 0;
+      A.forEach(function (g) { if (B.has(g)) inter++; });
+      return inter / Math.max(A.size, B.size, 1) >= 0.75;
+    }
     function removeUtt(u) {
       S.utts = S.utts.filter(function (x) { return x !== u; });
       if (u.el) u.el.remove();
@@ -4796,6 +4849,7 @@
     // sentences as provisional lines after a few seconds, then replace them with the final text.
     function provisional(ch, mid, prov) {
       if (!S.listening) return;
+      if (typeof HINT !== "undefined" && HINT.promoted && HINT.ch === ch) return;   // the browser recognizer is writing this channel
       if (!prov.start) prov.start = Date.now();
       const parts = splitSentences(mid);
       const done = /[。！？；!?.]\s*$/.test(mid) ? parts : parts.slice(0, -1);
@@ -4813,9 +4867,10 @@
       prov.utts = []; prov.committed = 0; prov.start = 0;
       const pieces = (ch === "room" || (ch === "mic" && !S.spk)) ? splitSentences(text) : [text];
       // Skip pieces the browser recognizer already added while Gemini was stalled.
-      const recent = HINT.promotedFinals.filter(function (h) { return Date.now() - h.at < 20000; });
+      HINT.promotedFinals = HINT.promotedFinals.filter(function (h) { return Date.now() - h.at < 20000; });
       pieces.forEach(function (p) {
-        if (recent.some(function (h) { return bigramSim(h.text, p) > 0.6; })) return;
+        const i = HINT.promotedFinals.findIndex(function (h) { return sameText(h.text, p); });
+        if (i !== -1) { HINT.promotedFinals.splice(i, 1); return; }   // already added by the browser recognizer
         addUtterance(ch, p);
       });
     }
@@ -4833,7 +4888,8 @@
     function recap(auto) {
       if (S.utts.length < 2) { toast("对话太少，还没法生成跟进。"); return; }
       if (!aiReady()) { toast("生成跟进需要先设置 AI 模型。"); openDrawer("model"); return; }
-      const transcript = S.utts.slice(-120).map(function (u) { return whoLabel(u.ch) + "：" + u.text; }).join("\n");
+      const enT = convoLang() === "en";
+      const transcript = S.utts.slice(-120).map(function (u) { return enT ? whoEn(u.ch) + ": " + u.text : whoLabel(u.ch) + "：" + u.text; }).join("\n");
       const bg = $("bgInput").value.trim();
       const enRecap = convoLang() === "en";
       const langRule = enRecap
@@ -4842,7 +4898,8 @@
       answer("通话跟进", {
         kind: "recap",
         displayQuestion: S.uiLang === "en" ? (auto ? "Follow-up for this conversation (auto-generated)" : "Follow-up for this conversation") : (auto ? "这场对话的跟进（停止收音后自动生成）" : "这场对话的跟进"),
-        system: "你是我的助理，根据刚才的对话记录整理会后跟进。只写对话里真实出现的内容，不要编造数字、日期或承诺。" + langRule +
+        system: (enRecap ? "You are my assistant. From the conversation transcript, write the follow-up. Only include what was actually said; never invent numbers, dates or commitments. "
+          : "你是我的助理，根据刚才的对话记录整理会后跟进。只写对话里真实出现的内容，不要编造数字、日期或承诺。") + langRule +
           (enRecap
             ? "\nUse exactly this format:\n[One-line summary]\n…\n\n[Their questions]\n• …\n\n[Commitments]\n• who · what · when (write \"TBD\" if no time was said)\n\n[Follow-up email]\nSubject: …\n\nBody: short, polite, ready to send; thank them, recap the key points, list next steps, close in one line."
             : "\n严格使用以下格式：\n【一句话总结】\n…\n\n【对方关心的问题】\n• …\n\n【约定的事项】\n• 谁 · 做什么 · 什么时候（没说时间就写「待定」）\n\n【跟进邮件】\n主题：…\n\n正文：简短、礼貌、可以直接发送；先感谢，再回顾要点，列出下一步，最后一句收尾。"),
@@ -5436,7 +5493,8 @@
           LEARN = Object.assign(LEARN, saved);
           LEARN.style = Object.assign({ "1": 0, "2": 0, "3": 0, "4": 0 }, saved.style || {});
           LEARN.spec = Object.assign({ hit: 0, miss: 0 }, saved.spec || {});
-          if (saved.speed && typeof saved.speed === "object") RACE.stats = saved.speed;
+          // Old measurements fade: anything slower than 2.5 s gets another chance on the next visit.
+          if (saved.speed && typeof saved.speed === "object") { RACE.stats = {}; Object.keys(saved.speed).forEach(function (k) { RACE.stats[k] = Math.min(saved.speed[k], 2500); }); }
         }
       } catch (_) {}
       renderLearn();
@@ -5626,6 +5684,7 @@
       TRAIN = [];
       idbDo("readwrite", function (st) { return st.delete("trainlog"); }).catch(function () {});
       LEARN = { w: {}, b: -1.1, n: 0, pos: 0, neg: 0, style: { "1": 0, "2": 0, "3": 0, "4": 0 }, spec: { hit: 0, miss: 0 } };
+      RACE.stats = {};
       learnSave();
       toast(S.uiLang === "en" ? "Learning reset." : "已重置学习。");
     });
@@ -5856,6 +5915,7 @@
       clearTimeout(S.recapTimer); clearTimeout(S.txTimer);
       if (SPEC.timer) { clearTimeout(SPEC.timer); SPEC.timer = null; }
       SPEC.heard = "";
+      HINT.promotedFinals = [];
       S.liveInterim = {};
       showInterim("");
       $("listenLive").textContent = "";
@@ -5897,7 +5957,7 @@
         if (!out.some(function (c) { return c.key === key; })) out.push({ key: key, provider: provider, model: model });
       };
       if (S.provider === "ollama") return [];
-      add(S.provider, S.model);
+      if (S.keys[S.provider]) add(S.provider, S.model);
       if (S.keys.gemini || S.keys.cue) {
         const prov = S.keys.gemini ? "gemini" : "cue";
         FAST_GEMINI.forEach(function (m) { add(prov, m); });
@@ -5948,24 +6008,28 @@
         const launch = function () {
           if (winner || next >= cands.length || signal.aborted) return;
           const c = cands[next++];
-          const r = { c: c, ctl: new AbortController() };
+          const r = { c: c, ctl: new AbortController(), t0: performance.now() };
           running.push(r);
+          // A candidate that sends nothing for 8 s is abandoned (its catch starts the next one).
+          r.timeout = setTimeout(function () { if (!winner) { r.timedOut = true; try { r.ctl.abort(); } catch (_) {} } }, 8000);
           streamOne(c, sys, user, r.ctl.signal, function (delta) {
             if (!winner) {
               winner = r;
               clearTimeout(hedgeTimer);
-              noteSpeed(c.key, performance.now() - t0);
+              clearTimeout(r.timeout);
+              noteSpeed(c.key, performance.now() - r.t0);
               stopAll(r);
               if (onWinner) onWinner(c);
             }
             if (winner === r) onDelta(delta);
           }).then(function () {
             if (winner === r) resolve();
-            else if (!winner) { failed++; launch(); if (failed >= next && next >= cands.length) reject(new Error("没有模型返回内容")); }
+            else if (!winner) { clearTimeout(r.timeout); failed++; launch(); if (failed >= next && next >= cands.length) reject(new Error("模型没有返回内容")); }
           }).catch(function (e) {
             if (winner === r) { reject(e); return; }
-            if (winner || signal.aborted) return;
-            noteSpeed(c.key, 5000);   // push failing models down the list
+            clearTimeout(r.timeout);
+            if (winner || (signal.aborted && !r.timedOut)) return;
+            if (!/\b429\b|rate|quota/i.test(String((e && e.message) || ""))) noteSpeed(c.key, r.timedOut ? 8000 : 3000);   // push failing models down the list
             failed++;
             if (failed >= cands.length) { reject(e); return; }
             launch();   // a failure starts the backup right away
@@ -6035,12 +6099,16 @@
     }
     function stopHint() {
       const rec = HINT.rec;
-      HINT.rec = null; HINT.promoted = false;
+      if (HINT.promoted && HINT.pending.trim() && HINT.ch) addUtterance(HINT.ch, HINT.pending);   // keep the last promoted words
+      HINT.rec = null; HINT.promoted = false; HINT.pending = ""; HINT.promotedFinals = []; HINT.toasted = 0;
+      if (HINT.ch) STT_STALL[HINT.ch] = false;
       if (rec) { try { rec.stop(); } catch (_) {} }
     }
     function onSttStall(ch, stalled) {
       if (ch !== HINT.ch || !HINT.rec) return;
       HINT.promoted = stalled;
+      if (stalled) HINT.toasted = (HINT.toasted || 0) + 1;
+      if (HINT.toasted > 1) return;   // tell the user once per session, not on every flap
       toast(stalled
         ? (S.uiLang === "en" ? "Gemini recognition is slow; using the browser recognizer for now." : "Gemini 识别变慢，已临时改用浏览器识别。")
         : (S.uiLang === "en" ? "Gemini recognition is back." : "Gemini 识别已恢复。"), 3000);
@@ -6120,12 +6188,12 @@
     }
     function markCitedSources(a, text) {
       const used = new Set();
-      (String(text).match(/\[(\d{1,2})\]/g) || []).forEach(function (m) { used.add(parseInt(m.slice(1, -1), 10) - 1); });
+      (String(text).match(/\[(\d{1,2})\]/g) || []).forEach(function (m) { const i = parseInt(m.slice(1, -1), 10) - 1; if (i >= 0 && i < a.hits.length) used.add(i); });
       Array.prototype.forEach.call(a.refs.kb.querySelectorAll(".kb-snip"), function (sn) {
         sn.classList.toggle("cited", used.has(parseInt(sn.dataset.i, 10)));
       });
       const sum = a.refs.kb.querySelector("summary .kb-used");
-      const label = used.size ? (S.uiLang === "en" ? "cited " : "引用了 ") + Array.from(used).sort().map(function (i) { return "[" + (i + 1) + "]"; }).join("") : (S.uiLang === "en" ? "not cited" : "回答没有引用");
+      const label = used.size ? (S.uiLang === "en" ? "cited " : "引用了 ") + Array.from(used).sort(function (x, y) { return x - y; }).map(function (i) { return "[" + (i + 1) + "]"; }).join("") : (S.uiLang === "en" ? "not cited" : "回答没有引用");
       if (sum) sum.textContent = label;
       else a.refs.kb.querySelector("summary").appendChild(el("span", { class: "kb-used u", text: label }));
     }
@@ -6162,7 +6230,7 @@
       const proc = ctx.createScriptProcessor(rate > 24000 ? 2048 : 1024, 1, 1);
       const mute = ctx.createGain();
       mute.gain.value = 0;
-      let ws = null, open = false, stopped = false, everOpen = false, retries = 0, finishWaiter = null;
+      let ws = null, open = false, stopped = false, everOpen = false, retries = 0, finishWaiter = null, closing = false;
       let pending = [], pendingLen = 0, finals = "";
       const queue = [];
       const prov = { utts: [], committed: 0, start: 0 };
@@ -6202,6 +6270,7 @@
           if (sock !== ws) return;
           open = false;
           if (stopped) return;
+          if (closing) { flushFinals(); if (finishWaiter) finishWaiter(); return; }
           if (!everOpen) { giveUp(); return; }
           if (retries++ < 30) setTimeout(function () { if (!stopped) connect(); }, Math.min(5000, 300 * retries));
           else giveUp();
@@ -6220,7 +6289,9 @@
       function giveUp() {
         if (stopped) return;
         teardown(false);
-        toast(S.uiLang === "en" ? "Deepgram unavailable; switched to Gemini." : "Deepgram 连不上，已改用 Gemini 识别。");
+        toast(liveSttUsable()
+          ? (S.uiLang === "en" ? "Deepgram unavailable; switched to Gemini." : "Deepgram 连不上，已改用 Gemini 识别。")
+          : (S.uiLang === "en" ? "Deepgram unavailable; switched to the browser recognizer." : "Deepgram 连不上，已改用浏览器识别。"));
         if (onFallback) onFallback(stream);
       }
       proc.onaudioprocess = function (ev) {
@@ -6257,9 +6328,14 @@
         return new Promise(function (resolve) {
           if (stopped) { resolve(); return; }
           let timer = null;
-          const done = function () { finishWaiter = null; clearTimeout(timer); stop(); resolve(); };
+          const done = function () { finishWaiter = null; clearTimeout(timer); teardown(true); resolve(); };
           finishWaiter = done;
-          timer = setTimeout(function () { if (finals.trim()) flushFinals(); done(); }, 1500);
+          closing = true;
+          timer = setTimeout(function () {
+            if (!finals.trim() && (S.liveInterim[ch] || "").trim()) finals = S.liveInterim[ch].trim();
+            if (finals.trim()) flushFinals();
+            done();
+          }, 1500);
           try { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: "CloseStream" })); } catch (_) {}
           if (!finals.trim() && !(S.liveInterim[ch] || "").trim()) done();
         });
@@ -6272,7 +6348,7 @@
     // 15a12. Pre-meeting prep card, post-call tabs
     // =====================================================================
     function prepSignature() {
-      return hashStr([$("ctxWho").value, $("ctxTopic").value, $("ctxGoal").value, S.docs.filter(function (d) { return d.name !== PREP_DOC && d.name !== MEMORY_DOC; }).map(function (d) { return d.name + d.text.length; }).join("|")].join("\u0001"));
+      return hashStr([$("ctxWho").value, $("ctxTopic").value, $("ctxGoal").value, S.docs.filter(function (d) { return d.name !== PREP_DOC && d.name !== MEMORY_DOC && d.name.indexOf("复盘 · ") !== 0 && d.name.indexOf("练习 · ") !== 0; }).map(function (d) { return d.name + d.text.length; }).join("|")].join("\u0001"));
     }
     function renderPrepCard() {
       const who = $("ctxWho").value.trim(), topic = $("ctxTopic").value.trim();
@@ -6295,7 +6371,7 @@
     // After a call: one tab bar instead of stacked cards.
     function postAvailable() {
       return {
-        recap: Boolean(S.current && S.current.kind === "recap"),
+        recap: Boolean(S.current),
         tx: $("transcriptCard").dataset.ready === "1",
         stats: $("statsCard").dataset.ready === "1"
       };
@@ -6307,6 +6383,8 @@
       $("postTabs").hidden = !any;
       if (!any) return;
       Array.prototype.forEach.call($("postTabs").children, function (b) { b.hidden = !av[b.dataset.post]; });
+      const cardBtn = $("postTabs").querySelector('[data-post="recap"]');
+      if (cardBtn) cardBtn.textContent = S.current && S.current.kind === "recap" ? (S.uiLang === "en" ? "Follow-up" : "跟进") : (S.uiLang === "en" ? "Answer" : "回答");
       let tab = S.postTab && av[S.postTab] ? S.postTab : "";
       if (!S.postTabUser && prefer && av[prefer] && (prefer === "recap" || !tab)) tab = prefer;
       if (!tab) tab = av.recap ? "recap" : (av.stats ? "stats" : "tx");
@@ -6524,6 +6602,10 @@
       ["正在评估…", "Evaluating…"], ["评估失败：", "Evaluation failed: "], ["得分 ", "Score "], ["已评估", "Evaluated"],
       ["这个浏览器不支持语音识别：请在设置里填 Gemini Key，或直接打字。", "This browser has no speech recognition: add a Gemini key in Settings, or type."],
       ["练习 · ", "Practice · "],
+      ["支持 Gemini、OpenAI、Claude、Deepgram（英文转写）、硅基流动、DeepSeek、智谱、通义千问，粘贴后自动识别。", "Works with Gemini, OpenAI, Claude, Deepgram (English transcription), SiliconFlow, DeepSeek, Zhipu and Qwen; detected automatically."],
+      ["Deepgram Nova-3 实时转写（英文，最快）", "Deepgram Nova-3 streaming (English, fastest)"],
+      ["Deepgram 连不上，已改用浏览器识别。", "Deepgram unavailable; switched to the browser recognizer."],
+      ["回答", "Answer"],
       ["会前一键准备", "Prepare before the meeting"], ["一键准备", "Prepare now"], ["重新准备", "Prepare again"],
       ["根据以上信息一键准备", "Prepare from this context"],
       ["预测对方最可能问的 8 个问题，提前写好你的回答；开会时被问到会立刻显示。", "Predicts the 8 questions they're most likely to ask and writes your answers in advance; they show instantly when asked."],
@@ -6826,7 +6908,7 @@
       $("composerInput").focus();
     });
     function askCue(q) {
-      const transcript = S.utts.slice(-120).map(function (u) { return whoLabel(u.ch) + ": " + u.text; }).join("\n");
+      const transcript = S.utts.slice(-120).map(function (u) { return whoEn(u.ch) + ": " + u.text; }).join("\n");
       const mats = materialsDigest(3000);
       answer(q, {
         kind: "ask",
