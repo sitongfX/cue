@@ -489,6 +489,10 @@
       dialog { padding: 20px 18px 18px; }
       .utt-act { opacity: 1; }
     }
+      details.adv { margin-top: 4px; }
+    details.adv > summary { cursor: pointer; list-style: revert; }
+    details.adv[open] > summary { margin-bottom: 8px; }
+    .dbg-preview { width: 100%; min-height: 220px; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-word; }
   </style>
 </head>
 <body data-view="live" data-pane="stage">
@@ -756,6 +760,21 @@
               <textarea class="textarea" id="bgInput" style="min-height: 80px;" placeholder="例如：我是 Cue 的产品负责人；语气专业、简洁；不要承诺具体上线日期。"></textarea>
               <span class="help">这些会放进每一次回答的提示里，回答会更贴合这场对话。每次开会前改一下就好。</span>
             </div>
+            <details class="field adv" id="promptAdv">
+              <summary class="label">高级：自己改回答提示词</summary>
+              <select class="select" id="promptMode">
+                <option value="append">加在内置提示词后面（推荐）</option>
+                <option value="replace">完全替换内置提示词</option>
+              </select>
+              <textarea class="textarea" id="promptCustom" maxlength="4000" style="min-height: 120px; margin-top: 8px;" placeholder="e.g. Keep every answer under 3 sentences. If reliability comes up, mention our SLA."></textarea>
+              <span class="help">只影响现场回答（含提前起草）。替换模式下仍会自动加上回答语言、资料引用编号和“只用资料里的事实”规则；{lang} 会换成回答语言。替换后，设置里的回答长度和场景不再生效。</span>
+              <div class="row" style="gap: 6px;">
+                <button class="btn" id="btnPromptLoad" type="button">载入内置提示词</button>
+                <button class="btn" id="btnPromptReset" type="button">恢复默认</button>
+                <button class="btn" id="btnPromptTry" type="button">用当前问题重答</button>
+                <button class="btn" id="btnPromptDbg" type="button">导出调试包</button>
+              </div>
+            </details>
             <div class="row"><button class="btn btn-primary" id="btnPrepCtx" type="button">根据以上信息一键准备</button>
               <span class="help">预测对方最可能问的 8 个问题，提前写好你的回答；开会时被问到会立刻显示。</span></div>
           </div>
@@ -1102,6 +1121,14 @@
           </div>
           <input id="chkRace" type="checkbox" checked />
         </label>
+        <div class="field">
+          <span class="label">回答优先</span>
+          <select class="select" id="prioSel">
+            <option value="speed">速度优先</option>
+            <option value="quality">质量优先</option>
+          </select>
+          <span class="help">质量优先：先用回答更好的模型（你选的模型、Claude、GPT、Gemini 3 Flash），给它 2.5 秒出字；用自己的 Gemini Key 时会多想一下。第一句会慢一些。</span>
+        </div>
         <label class="switch">
           <div>
             <div class="label">提前起草回答</div>
@@ -1147,10 +1174,44 @@
       <kbd>R</kbd><span>帮我圆回来（说错或卡住时）</span>
       <kbd>X</kbd><span>不是问题（以后类似的话不再自动回答）</span>
       <kbd>N</kbd><span>新对话</span>
+      <kbd>D</kbd><span>导出调试包（发给开发者）</span>
       <kbd>Esc</kbd><span>关闭面板</span>
       <kbd>?</kbd><span>显示这个列表</span>
     </div>
     <div class="row" style="margin-top: 18px; justify-content: flex-end;"><button class="btn" id="btnKeysClose" type="button">关闭</button></div>
+  </dialog>
+
+  <dialog id="dbgDialog">
+    <h3>导出调试包（发给开发者）</h3>
+    <p>包含：发给模型的完整提示词、匹配到的资料、回答、用的模型和耗时。只在这台设备上生成；发不发、发给谁由你决定。不含 API Key。</p>
+    <div class="field" style="margin-top: 10px;">
+      <span class="label">范围</span>
+      <select class="select" id="dbgScope">
+        <option value="current">当前回答</option>
+        <option value="recent">最近 10 个回答</option>
+      </select>
+    </div>
+    <label class="switch" style="margin-top: 8px;">
+      <div>
+        <div class="label">隐去敏感信息</div>
+        <div class="help">邮箱、网址、电话、数字和下面列出的词换成 [N1]、[T1] 这样的编号；同一个值编号相同，对照表只留在这台设备上。</div>
+      </div>
+      <input id="chkRedact" type="checkbox" checked />
+    </label>
+    <div class="field">
+      <span class="label">还要隐去的词</span>
+      <input class="input" id="dbgTerms" type="text" placeholder="用逗号分开，例如：Acme, Sarah, 项目代号" />
+    </div>
+    <div class="field">
+      <span class="label">哪里不好（可选）</span>
+      <input class="input" id="dbgNote" type="text" placeholder="例如：第一句太长；没用上资料里的价格" />
+    </div>
+    <textarea class="textarea dbg-preview" id="dbgPreview" readonly></textarea>
+    <div class="row" style="margin-top: 14px; justify-content: flex-end; gap: 8px;">
+      <button class="btn" id="btnDbgClose" type="button">关闭</button>
+      <button class="btn" id="btnDbgSave" type="button">下载</button>
+      <button class="btn btn-primary" id="btnDbgCopy" type="button">复制</button>
+    </div>
   </dialog>
 
   <dialog id="voiceDialog">
@@ -1553,7 +1614,7 @@
         uiLang: S.uiLang, spokenLang: $("spokenLang").value, fastMic: $("chkFastMic").checked ? "1" : "0",
         translate: $("translateSel").value, liveStt: $("chkLiveStt").checked ? "1" : "0", coach: $("chkCoach").checked ? "1" : "0",
         spec: $("chkSpec").checked ? "1" : "0", recap: $("chkRecap").checked ? "1" : "0", semantic: $("chkSemantic").checked ? "1" : "0",
-        memory: $("chkMemory").checked ? "1" : "0", record: $("chkRecord").checked ? "1" : "0", race: $("chkRace").checked ? "1" : "0", hint: $("chkHint").checked ? "1" : "0", deepgram: $("chkDeepgram").checked ? "1" : "0", roles: $("chkRoles").checked ? "1" : "0", contribute: $("chkContribute").checked ? "1" : "0", protect: $("chkProtect").checked ? "1" : "0", voiceMe: S.voiceMe ? String(S.voiceMe) : ""
+        memory: $("chkMemory").checked ? "1" : "0", record: $("chkRecord").checked ? "1" : "0", race: $("chkRace").checked ? "1" : "0", hint: $("chkHint").checked ? "1" : "0", deepgram: $("chkDeepgram").checked ? "1" : "0", roles: $("chkRoles").checked ? "1" : "0", contribute: $("chkContribute").checked ? "1" : "0", prio: $("prioSel").value, promptMode: $("promptMode").value, promptCustom: $("promptCustom").value, dbgTerms: $("dbgTerms").value, protect: $("chkProtect").checked ? "1" : "0", voiceMe: S.voiceMe ? String(S.voiceMe) : ""
       };
     }
 
@@ -1581,6 +1642,10 @@
       if (st.deepgram) $("chkDeepgram").checked = st.deepgram === "1";
       if (st.roles) $("chkRoles").checked = st.roles === "1";
       if (st.contribute) $("chkContribute").checked = st.contribute === "1";
+      if (st.prio === "speed" || st.prio === "quality") $("prioSel").value = st.prio;
+      if (st.promptMode === "append" || st.promptMode === "replace") $("promptMode").value = st.promptMode;
+      if (typeof st.promptCustom === "string") { $("promptCustom").value = st.promptCustom; if (st.promptCustom.trim()) $("promptAdv").open = true; }
+      if (typeof st.dbgTerms === "string") $("dbgTerms").value = st.dbgTerms;
       if (st.protect) { $("chkProtect").checked = st.protect === "1"; applyProtect(); }
       if (typeof st.voiceMe === "string") { S.voiceMe = parseFloat(st.voiceMe) || 0; voiceStateUi(); }
       if (st.uiLang && st.uiLang !== S.uiLang) setUiLang(st.uiLang, true);
@@ -2244,7 +2309,12 @@
       const send = function (withThinking) {
         const body = JSON.parse(JSON.stringify(payload));
         body.generationConfig = body.generationConfig || {};
-        if (withThinking) body.generationConfig.thinkingConfig = { thinkingLevel: "minimal" };
+        // Quality first: let the stronger Gemini answer models think a little.
+        const deeper = /streamGenerateContent/.test(method) && /gemini-3[\w.-]*-(?:flash(?!-lite)|pro)/.test(model) && $("prioSel").value === "quality";
+        const lvl = (/gemini-3[\w.-]*-pro/.test(model) || deeper) ? "low" : "minimal";   // Gemini 3 Pro doesn't accept "minimal"
+        if (withThinking) body.generationConfig.thinkingConfig = { thinkingLevel: lvl };
+        // Thinking tokens count toward the output limit on Gemini 3: leave room so answers aren't cut off.
+        if (withThinking && lvl === "low" && body.generationConfig.maxOutputTokens > 1) body.generationConfig.maxOutputTokens = Math.max(body.generationConfig.maxOutputTokens, 1600);
         return fetch(url, { method: "POST", signal: signal,
           headers: { "Content-Type": "application/json", "x-goog-api-key": S.keys.gemini },
           body: JSON.stringify(body) });
@@ -2695,7 +2765,10 @@
       return out;
     }
 
-    function systemText(q) {
+    const CITE_RULE = "The passages in [My materials] are numbered. Right after any fact, number or claim taken from a passage, add its number in square brackets, e.g. \"15% off for annual plans [1]\". " +
+      "Only cite passages you actually used; never put a number on something that isn't in them.";
+    function systemText(q) { return applyCustomPrompt(builtinSystemText(q), q); }
+    function builtinSystemText(q) {
       const lang = outLang(q || "");
       const len = $("lengthSel").value;
       const scen = SCENARIO_PROMPTS[$("scenarioSel").value] || SCENARIO_PROMPTS.meeting;
@@ -2723,8 +2796,7 @@
         strict = "\nIf [My materials] contain relevant facts, use them exactly. Never invent numbers, names, dates or experiences that aren't there; if the materials don't cover it, answer honestly in general terms.";
       }
       if (S.docs.length) {
-        strict += "\nThe passages in [My materials] are numbered. Right after any fact, number or claim taken from a passage, add its number in square brackets, e.g. \"15% off for annual plans [1]\". " +
-          "Only cite passages you actually used; never put a number on something that isn't in them.";
+        strict += "\n" + CITE_RULE;
       }
       return scen + "\n" + fmt + strict + styleHints(lang === "zh" ? "zh" : "en");
     }
@@ -2925,6 +2997,9 @@
         fetch(ca.base + "/v1/health", { headers: { "Authorization": "Bearer " + ca.secret } }).catch(function () {});
         return;
       }
+      [["anthropic", "https://api.anthropic.com/v1/models"], ["openai", "https://api.openai.com/v1/models"]].forEach(function (p) {
+        if (S.keys[p[0]]) fetch(cloudUrl(p[1]), { mode: "no-cors", cache: "no-store" }).catch(function () {});
+      });
       if (!S.keys.gemini || Date.now() - warmedAt < 20000) return;
       warmedAt = Date.now();
       geminiFetch(/^gemini/.test(S.model) ? S.model : PROVIDERS.gemini.model, "generateContent", {
@@ -3016,6 +3091,11 @@
           actions.appendChild(el("button", { class: "chip", type: "button", onclick: function () { followUp(f); } },
             f.label, el("kbd", { text: f.key })));
         });
+      }
+      if (a.kind === "answer") {
+        actions.appendChild(el("button", { class: "chip", type: "button", text: "重答", title: "用现在的设置和提示词再答一次", onclick: function () { regenerate(a); } }));
+        actions.appendChild(el("button", { class: "chip", type: "button", title: "导出这次回答的提示词、资料和结果，方便调优", onclick: function () { openDebug("current"); } },
+          "调试包", el("kbd", { text: "D" })));
       }
       const copyBtn = el("button", { class: "chip", type: "button", text: "复制", onclick: function () {
         if (!navigator.clipboard) return;
@@ -3209,6 +3289,7 @@
         error: ""
       };
       if (opts.utt && opts.utt.el) opts.utt.el.classList.add("answered");
+      a.req = { q: q, extra: opts.extra, base: opts.base, presetHits: opts.presetHits, displayQuestion: opts.displayQuestion, followLabel: opts.followLabel };
       S.answers.push(a);
       showAnswer(a);
 
@@ -3237,12 +3318,20 @@
       const t0 = performance.now();
       try {
         const runner = a.kind === "answer" && !opts.system && !opts.spec ? streamRace : streamAnswer;
-        await runner(opts.system || systemText(q), opts.user || userText(q, a.hits, extra), ctl.signal, function (delta) {
+        // A prepared Q&A matched: keep its facts and wording, adapt it to the exact question.
+        if (a.kind === "answer" && !opts.user && preparedAnswer(a.hits)) {
+          extra = (extra ? extra + "\n\n" : "") + "Passage [1] is my prepared answer to this question: keep its facts and wording, adapt it to exactly what they asked.";
+        }
+        const sysP = opts.system || systemText(q), userP = opts.user || userText(q, a.hits, extra);
+        // Memory only, for the debug bundle (never saved with the session).
+        a.dbg = { system: sysP, user: userP, prio: $("prioSel").value, hits: a.hits.slice(), custom: a.kind === "answer" && !opts.system ? customPromptText() : "", race: [] };
+        await runner(sysP, userP, ctl.signal, function (delta) {
           if (!a.ttft) { a.ttft = performance.now() - t0; a.firstAt = Date.now(); }
           a.text += delta;
           updateAnswer(a);
-        }, function (c) { a.model = c.model; });
+        }, function (c) { a.model = c.model; }, a.dbg.race);
         a.status = a.text ? "done" : "error";
+        if (a.dbg) a.dbg.totalMs = performance.now() - t0;
         if (!a.text) a.error = "模型没有返回内容";
       } catch (e) {
         if (e && e.name === "AbortError") { a.status = a.text ? "aborted" : "error"; a.error = "已被新的问题打断"; }
@@ -3667,6 +3756,11 @@
       if ((ev.key === "x" || ev.key === "X") && S.current && S.current.auto && S.current.kind === "answer") { ev.preventDefault(); notAQuestion(S.current); return; }
       if ((ev.key === "r" || ev.key === "R") && S.current && S.current.kind === "answer") { ev.preventDefault(); rescue(S.current); return; }
       if (ev.key === "n" || ev.key === "N") { ev.preventDefault(); newConversation(false); return; }
+      if (ev.key === "d" || ev.key === "D") {
+        ev.preventDefault();
+        if (target && target.ownerDocument && target.ownerDocument !== document) { toast("调试包请在主窗口打开。"); return; }
+        openDebug("current"); return;
+      }
       if (ev.key === "?") { ev.preventDefault(); openShortcuts(); return; }
       const f = FOLLOWUPS.find(function (x) { return x.key === ev.key; });
       if (f && S.current && S.current.kind === "answer") { ev.preventDefault(); followUp(f); }
@@ -3841,7 +3935,7 @@
     if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
       navigator.mediaDevices.addEventListener("devicechange", refreshMicDevices);
     }
-    ["scenarioSel", "langSel", "lengthSel", "bgInput", "ctxWho", "ctxTopic", "ctxGoal", "chkStrict", "modelInput", "spokenLang", "chkFastMic", "translateSel", "chkLiveStt", "chkCoach", "chkSpec", "chkRecap", "chkSemantic", "chkMemory", "chkContribute", "chkProtect", "chkRecord", "chkRoles", "chkRace", "chkHint", "chkDeepgram"].forEach(function (id) {
+    ["scenarioSel", "langSel", "lengthSel", "bgInput", "ctxWho", "ctxTopic", "ctxGoal", "chkStrict", "modelInput", "spokenLang", "chkFastMic", "translateSel", "chkLiveStt", "chkCoach", "chkSpec", "chkRecap", "chkSemantic", "chkMemory", "chkContribute", "chkProtect", "chkRecord", "chkRoles", "chkRace", "chkHint", "chkDeepgram", "prioSel", "promptMode", "promptCustom", "dbgTerms"].forEach(function (id) {
       $(id).addEventListener("change", persistKb);
     });
     $("scenarioSel").addEventListener("change", function () {
@@ -5148,14 +5242,14 @@
       const en = lang === "en" || lang === "bilingual" || (lang !== "zh" && !CJK_RE.test(q || ""));
       const t = (q || "").toLowerCase();
       const pick = function (zh, e) { return en ? e : zh; };
-      if (/价格|多少钱|收费|费用|预算|报价|折扣|price|pricing|cost|budget|discount|how much/.test(t)) return pick("价格这块，我说一下我们是怎么算的。", "Good question on pricing. Here's how it works.");
+      if (/价格|多少钱|收费|费用|预算|报价|折扣|price|pricing|cost|budget|discount|how much/.test(t)) return pick("价格这块，我说一下我们是怎么算的。", "On pricing, here's how it works.");
       if (/区别|不同|对比|相比|比.{0,6}(好|强|差)|竞品|vs\b|versus|differ|compare|compared|better than/.test(t)) return pick("最大的区别其实在这里。", "The biggest difference is this.");
       if (/为什么|为啥|原因|why\b/.test(t)) return pick("主要有几个原因，我挑最关键的说。", "There are a few reasons; let me start with the main one.");
       if (/例子|举个|比如|案例|example|instance|case study/.test(t)) return pick("我举个具体的例子。", "Let me give you a concrete example.");
       if (/多久|什么时候|时间|周期|上线|timeline|how long|when\b|deadline/.test(t)) return pick("时间上大概是这样安排的。", "On timing, here's what to expect.");
       if (/风险|担心|顾虑|安全|隐私|合规|risk|concern|worried|security|privacy|compliance/.test(t)) return pick("这个顾虑很合理，我们是这样处理的。", "That's a fair concern. Here's how we handle it.");
       if (/怎么|如何|怎样|how\b/.test(t)) return pick("我们具体是这么做的。", "Here's how we approach it.");
-      return pick("好问题，我分两三点说。", "Good question. Let me break it down.");
+      return pick("我分两三点说。", "Let me break that down.");
     }
 
     // ---- Several questions in one turn: track each one ----
@@ -5952,7 +6046,11 @@
     // Live answers start on the model that has been fastest for you. If no words arrive within HEDGE_MS,
     // a second request starts on the next model; whichever streams first wins and the other is cancelled.
     const FAST_GEMINI = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3-flash-preview", "gemini-flash-lite-latest"];
-    const RACE = { hedgeMs: 650, stats: {} };   // stats[key] = moving average of time to first words (ms)
+    const RACE = { hedgeMs: 650, qualityHedgeMs: 2500, stats: {} };   // stats[key] = moving average of time to first words (ms)
+    // "Quality first": better writers lead the race; the fast ones only step in if they're silent.
+    const QUALITY_ORDER = ["anthropic:", "openai:", "gemini:gemini-3-flash-preview", "cue:gemini-3-flash-preview"];
+    // Gemini 3 Flash thinks more in quality mode, so its timing is tracked separately there.
+    function statKey(c) { return c.key + ($("prioSel").value === "quality" && /^gemini:gemini-3[\w.-]*-(?:flash(?!-lite)|pro)/.test(c.key) ? "#q" : ""); }   // stats[key] = moving average of time to first words (ms)
     function raceCandidates() {
       const out = [];
       const add = function (provider, model) {
@@ -5967,8 +6065,16 @@
       }
       ["openai", "anthropic", "siliconflow", "deepseek", "zhipu", "qwen"].forEach(function (p) { if (S.keys[p]) add(p, PROVIDERS[p].model); });
       // Fastest first (by what we've measured on this connection); the configured model breaks ties.
+      const qRank = function (c) {
+        if ($("prioSel").value !== "quality") return 0;
+        if (c.key === S.provider + ":" + S.model && !/lite/.test(S.model)) return -1;   // a model you picked yourself goes first
+        const i = QUALITY_ORDER.findIndex(function (p) { return c.key.indexOf(p) === 0; });
+        return i === -1 ? QUALITY_ORDER.length : i;
+      };
       return out.sort(function (a, b) {
-        const ta = RACE.stats[a.key], tb = RACE.stats[b.key];
+        const d = qRank(a) - qRank(b);
+        if (d) return d;
+        const ta = RACE.stats[statKey(a)], tb = RACE.stats[statKey(b)];
         if (ta === undefined && tb === undefined) return 0;
         if (ta === undefined) return a.key === S.provider + ":" + S.model ? -1 : 1;
         if (tb === undefined) return b.key === S.provider + ":" + S.model ? 1 : -1;
@@ -5987,6 +6093,12 @@
       if (c.provider === "anthropic") return streamAnthropic(key, c.model, sys, user, signal, onDelta);
       return streamOpenAI(PROVIDERS[c.provider].url, key, c.model, sys, user, signal, onDelta);
     }
+    // How long to wait for the leader before asking a backup: about 1.3x its usual time to first words.
+    function firstHedgeMs(c) {
+      if ($("prioSel").value === "quality") return RACE.qualityHedgeMs;
+      const t = RACE.stats[statKey(c)];
+      return t === undefined ? RACE.hedgeMs : Math.max(400, Math.min(1200, t * 1.3));
+    }
     function noteSpeed(key, ms) {
       const old = RACE.stats[key];
       RACE.stats[key] = old === undefined ? ms : old * 0.7 + ms * 0.3;
@@ -5994,7 +6106,7 @@
       learnSave();
     }
     // Resolves when the winning stream finishes. onWinner(candidate) is called once, at the first words.
-    function streamRace(sys, user, signal, onDelta, onWinner) {
+    function streamRace(sys, user, signal, onDelta, onWinner, trace) {
       const cands = $("chkRace").checked ? raceCandidates() : [];
       if (cands.length < 2) return streamAnswer(sys, user, signal, onDelta);
       return new Promise(function (resolve, reject) {
@@ -6013,6 +6125,7 @@
           const c = cands[next++];
           const r = { c: c, ctl: new AbortController(), t0: performance.now() };
           running.push(r);
+          if (trace) trace.push({ key: c.key, outcome: "start", ms: performance.now() - t0 });
           // A candidate that sends nothing for 8 s is abandoned (its catch starts the next one).
           r.timeout = setTimeout(function () { if (!winner) { r.timedOut = true; try { r.ctl.abort(); } catch (_) {} } }, 8000);
           streamOne(c, sys, user, r.ctl.signal, function (delta) {
@@ -6020,7 +6133,8 @@
               winner = r;
               clearTimeout(hedgeTimer);
               clearTimeout(r.timeout);
-              noteSpeed(c.key, performance.now() - r.t0);
+              noteSpeed(statKey(c), performance.now() - r.t0);
+              if (trace) trace.push({ key: c.key, outcome: "win", ms: performance.now() - t0 });
               stopAll(r);
               if (onWinner) onWinner(c);
             }
@@ -6032,14 +6146,16 @@
             if (winner === r) { reject(e); return; }
             clearTimeout(r.timeout);
             if (winner || (signal.aborted && !r.timedOut)) return;
-            if (!/\b429\b|rate|quota/i.test(String((e && e.message) || ""))) noteSpeed(c.key, r.timedOut ? 8000 : 3000);   // push failing models down the list
+            const limited = /\b429\b|rate|quota/i.test(String((e && e.message) || ""));
+            if (!limited) noteSpeed(statKey(c), r.timedOut ? 8000 : 3000);   // push failing models down the list
+            if (trace) trace.push({ key: c.key, outcome: r.timedOut ? "timeout" : (limited ? "429" : "error"), ms: performance.now() - t0 });
             failed++;
             if (failed >= cands.length) { reject(e); return; }
             launch();   // a failure starts the backup right away
           });
           // Still no words: add a backup after 0.65 s, another after 1.5 s more (a failure starts one at once).
           clearTimeout(hedgeTimer);
-          if (running.length <= 2) hedgeTimer = setTimeout(function () { if (!winner) launch(); }, running.length === 1 ? RACE.hedgeMs : 1500);
+          if (running.length <= 2) hedgeTimer = setTimeout(function () { if (!winner) launch(); }, running.length === 1 ? firstHedgeMs(cands[0]) : 1500);
         };
         launch();
       });
@@ -6415,6 +6531,143 @@
     });
 
     // =====================================================================
+    // =====================================================================
+    // 15b. My own prompt, re-answer, and the debug bundle
+    // =====================================================================
+    function customPromptText() { return ($("promptCustom").value || "").trim().slice(0, 4000); }
+    function applyCustomPrompt(built, q) {
+      const c = customPromptText();
+      if (!c) return built;
+      const lang = outLang(q || "");
+      const name = lang === "bilingual" ? "English, with short Chinese glosses" : langName(lang);
+      const mine = c.replace(/\{lang\}/g, name);
+      if ($("promptMode").value !== "replace") return built + "\n\n[My own instructions: follow these over anything above if they conflict]\n" + mine;
+      return mine + "\n\nWrite in " + name + "." +
+        (/[»•]/.test(mine) ? "" : "\nFormat: line 1 = one sentence I can say out loud; then short lines starting with \"• \". No markdown.") +
+        (S.strictKb && S.docs.length ? "\nIf [My materials] contain relevant facts, use them exactly. Never invent numbers, names or dates that aren't there." : "") +
+        (S.docs.length ? "\n" + CITE_RULE : "");
+    }
+    $("btnPromptLoad").addEventListener("click", function () {
+      let t = builtinSystemText(S.current && S.current.kind === "answer" ? S.current.question : "");
+      // Language, citations and the strict-materials rule are added automatically, so leave them out of the editable copy.
+      t = t.split("\n" + CITE_RULE).join("").replace(/\nIf \[My materials\] contain relevant facts[^\n]*/, "")
+        .replace(/\nWrite in (?:Simplified Chinese|English|the languages above)\. [^\n]*/, "\nWrite in {lang}. " + SPOKEN_EN);
+      $("promptCustom").value = t;
+      $("promptMode").value = "replace";
+      persistKb();
+      toast("已载入内置提示词：改完后会替换内置提示词。");
+    });
+    $("btnPromptReset").addEventListener("click", function () {
+      $("promptCustom").value = ""; $("promptMode").value = "append"; persistKb();
+      toast("已恢复默认提示词。");
+    });
+    function regenerate(a) {
+      if (!a) return;
+      const r = a.req || { q: a.question };
+      answer(r.q, { followLabel: r.followLabel || "重答", extra: r.extra, base: r.base, presetHits: r.presetHits, displayQuestion: r.displayQuestion });
+    }
+    $("btnPromptTry").addEventListener("click", function () {
+      const a = S.current && S.current.kind === "answer" ? S.current : S.answers.slice().reverse().find(function (x) { return x.kind === "answer"; });
+      if (!a) { toast("先问一个问题，再来重答。"); return; }
+      persistKb();
+      regenerate(a);
+    });
+    $("btnPromptDbg").addEventListener("click", function () { openDebug("recent"); });
+
+    // Redaction: the same value always gets the same tag, so the bundle stays checkable
+    // (e.g. "the answer said [N3], the passage said [N3]") without showing the value.
+    const SECRET_RE = /AIza[0-9A-Za-z_\-]{20,}|AQ\.[0-9A-Za-z_\-]{20,}|sk-[A-Za-z0-9_\-]{12,}|github_pat_[0-9A-Za-z_]{20,}|\b[0-9a-f]{40}\b|cue_[A-Za-z0-9_\-]{8,}(?:@\S+)?|\b[0-9a-f]{32}\.[0-9A-Za-z]{16}\b/g;
+    function scrubKeys(t) {
+      t = String(t || "").replace(SECRET_RE, "[KEY]");
+      Object.keys(S.keys || {}).forEach(function (k) { const v = S.keys[k]; if (v && v.length >= 8) t = t.split(v).join("[KEY]"); });
+      return t;
+    }
+    function makeRedactor(terms, on) {
+      const map = new Map(), count = {};
+      const tag = function (kind, val) {
+        const k = kind + "|" + val.toLowerCase();
+        if (!map.has(k)) { count[kind] = (count[kind] || 0) + 1; map.set(k, "[" + kind + count[kind] + "]"); }
+        return map.get(k);
+      };
+      const list = (terms || []).map(function (t) { return t.trim(); }).filter(function (t) { return t.length >= 2; })
+        .sort(function (a, b) { return b.length - a.length; });
+      const esc = function (t) { return t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); };
+      const termRe = list.length ? new RegExp(list.map(function (x) { const e = esc(x); return /^\w/.test(x) && /\w$/.test(x) ? "\\b" + e + "\\b" : e; }).join("|"), "gi") : null;
+      return function (t) {
+        t = scrubKeys(t);
+        if (!on) return t;
+        t = t.replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, function (m) { return tag("EMAIL", m); });
+        t = t.replace(/https?:\/\/[^\s)\]"'<>\u3000-\u303f\uff00-\uffef\u4e00-\u9fff]+/g, function (m) { return tag("URL", m); });
+        t = t.replace(/\b(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|net|org|io|ai|cn|co|dev|app|so|xyz|tech|cloud)\b(?:\/[^\s)\]"'<>\u3000-\u303f\uff00-\uffef\u4e00-\u9fff]*)?/gi, function (m) { return tag("URL", m); });
+        if (termRe) t = t.replace(termRe, function (m) { return tag("T", m); });
+        t = t.replace(/\+?\d[\d ()-]{7,}\d/g, function (m) { const d = m.replace(/\D/g, ""); return d.length >= 9 ? tag("PHONE", d) : m; });
+        t = t.replace(/(?<![A-Za-z\[]|\[[\d,，、\s-]*)\d+(?:[.,]\d+)*/g, function (m) { return m.length >= 2 ? tag("N", m) : m; });
+        return t;
+      };
+    }
+    function dbgTermsList() { return ($("dbgTerms").value || "").split(/[,，;；、\n]/); }
+    function debugEntries(scope) {
+      const list = S.answers.filter(function (a) { return a.dbg && a.kind === "answer"; });
+      if (scope === "current") return S.current && S.current.dbg && S.current.kind === "answer" ? [S.current] : list.slice(-1);
+      return list.slice(-10);
+    }
+    function debugBundle(scope, redactOn, terms, note) {
+      const R = makeRedactor(terms, redactOn);
+      const fence = "````";
+      const out = ["# Cue debug bundle", "- Generated: " + new Date().toISOString(),
+        "- Settings: scenario=" + $("scenarioSel").value + ", answerLang=" + $("langSel").value + ", length=" + $("lengthSel").value +
+          ", priority=" + $("prioSel").value + ", race=" + ($("chkRace").checked ? "on" : "off") + ", strictMaterials=" + (S.strictKb ? "on" : "off") +
+          ", customPrompt=" + (customPromptText() ? $("promptMode").value : "none"),
+        "- Materials: " + S.docs.length + " docs, " + S.chunks.length + " passages" + (redactOn ? "\n- Redacted: the same value always gets the same tag ([N1], [T1], …); the lookup table stays on the user's device" : "")];
+      if (note && note.trim()) out.push("\n## What felt wrong (from the user)\n" + R(note.trim()));
+      const entries = debugEntries(scope);
+      if (!entries.length) out.push("\n(No answers with prompts yet: ask a question first.)");
+      entries.forEach(function (a, i) {
+        out.push("\n## " + (i + 1) + ". " + R(a.question));
+        out.push("- Model: " + (a.model || "?") + " · first words " + Math.round(a.ttft || 0) + " ms" + (a.dbg.totalMs ? " · finished " + Math.round(a.dbg.totalMs) + " ms" : "") +
+          " · " + a.status + " · " + (a.auto ? "auto" : "manual") + " · priority " + (a.dbg.prio || "speed"));
+        const hs = a.dbg.hits || a.hits;
+        if (a.dbg.race && a.dbg.race.length) out.push("- Race: " + a.dbg.race.map(function (e) { return e.key + " " + e.outcome + (e.ms ? " @" + Math.round(e.ms) + "ms" : ""); }).join(" · "));
+        out.push("- Retrieved: " + (hs.length ? hs.map(function (h, j) {
+          return "[" + (j + 1) + "] " + R(h.doc) + (typeof h.cos === "number" ? " (cos " + h.cos.toFixed(2) + ")" : "");
+        }).join("; ") : "none"));
+        // The built-in prompt has no personal data: only the user's own part is redacted, so the length rules stay readable.
+        const sys = a.dbg.system, cut = sys.indexOf("\n\n[My own instructions");
+        const sysOut = cut !== -1 ? scrubKeys(sys.slice(0, cut)) + R(sys.slice(cut)) : (a.dbg.custom ? R(sys) : scrubKeys(sys));
+        out.push("\n### System prompt\n" + fence + "\n" + sysOut + "\n" + fence);
+        out.push("\n### User prompt\n" + fence + "\n" + R(a.dbg.user) + "\n" + fence);
+        out.push("\n### Answer\n" + fence + "\n" + R(a.text || a.error || "") + "\n" + fence);
+      });
+      return out.join("\n");
+    }
+    function refreshDebug() {
+      $("dbgPreview").value = debugBundle($("dbgScope").value, $("chkRedact").checked, dbgTermsList(), $("dbgNote").value);
+    }
+    function openDebug(scope) {
+      $("dbgScope").value = scope === "recent" ? "recent" : "current";
+      refreshDebug();
+      const d = $("dbgDialog");
+      if (d.showModal) { if (!d.open) d.showModal(); } else d.setAttribute("open", "");
+    }
+    ["dbgScope", "chkRedact", "dbgTerms", "dbgNote"].forEach(function (id) {
+      $(id).addEventListener("input", refreshDebug);
+      $(id).addEventListener("change", refreshDebug);
+    });
+    $("btnDbgClose").addEventListener("click", function () { $("dbgDialog").close(); });
+    $("btnDbgSave").addEventListener("click", function () {
+      refreshDebug();
+      downloadText($("dbgPreview").value, "cue-debug-" + new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-") + ".md", "text/markdown");
+    });
+    $("btnDbgCopy").addEventListener("click", function () {
+      refreshDebug();
+      const manual = function () { $("dbgPreview").select(); toast("已选中，请按 Ctrl/⌘+C 复制。"); };
+      if (!navigator.clipboard) { manual(); return; }
+      navigator.clipboard.writeText($("dbgPreview").value).then(function () {
+        $("btnDbgCopy").textContent = "已复制";
+        setTimeout(function () { $("btnDbgCopy").textContent = S.uiLang === "en" ? "Copy" : "复制"; }, 1400);
+      }).catch(manual);
+    });
+
     // 15c. Interface language (中文 / English)
     // UI strings are written in Chinese; in English mode every visible UI text node and
     // placeholder/title is translated through this table. User content (transcripts,
@@ -6605,6 +6858,26 @@
       ["正在评估…", "Evaluating…"], ["评估失败：", "Evaluation failed: "], ["得分 ", "Score "], ["已评估", "Evaluated"],
       ["这个浏览器不支持语音识别：请在设置里填 Gemini Key，或直接打字。", "This browser has no speech recognition: add a Gemini key in Settings, or type."],
       ["练习 · ", "Practice · "],
+      ["高级：自己改回答提示词", "Advanced: edit the answer prompt yourself"],
+      ["加在内置提示词后面（推荐）", "Add after the built-in prompt (recommended)"],
+      ["完全替换内置提示词", "Replace the built-in prompt"],
+      ["只影响现场回答（含提前起草）。替换模式下仍会自动加上回答语言、资料引用编号和“只用资料里的事实”规则；{lang} 会换成回答语言。替换后，设置里的回答长度和场景不再生效。", "Only affects live answers (including early drafts). In replace mode Cue still adds the answer language, the citation rule and the \"use only my facts\" rule; {lang} becomes the answer language. Answer length and scenario in Settings no longer apply once replaced."],
+      ["载入内置提示词", "Load the built-in prompt"], ["恢复默认", "Reset to default"], ["用当前问题重答", "Re-answer the current question"], ["导出调试包", "Export debug bundle"],
+      ["回答优先", "Answer priority"], ["速度优先", "Speed first"], ["质量优先", "Quality first"],
+      ["质量优先：先用回答更好的模型（你选的模型、Claude、GPT、Gemini 3 Flash），给它 2.5 秒出字；用自己的 Gemini Key 时会多想一下。第一句会慢一些。", "Quality first: the stronger models (the one you picked, Claude, GPT, Gemini 3 Flash) go first and get 2.5 s to start; with your own Gemini key it thinks a little more. The first line comes a bit later."],
+      ["导出调试包（发给开发者）", "Export debug bundle (for the developer)"],
+      ["包含：发给模型的完整提示词、匹配到的资料、回答、用的模型和耗时。只在这台设备上生成；发不发、发给谁由你决定。不含 API Key。", "Includes the full prompt sent to the model, the matched materials, the answer, the model and timings. Built on this device only; you decide whether and to whom to send it. No API keys."],
+      ["范围", "Scope"], ["当前回答", "Current answer"], ["最近 10 个回答", "Last 10 answers"],
+      ["隐去敏感信息", "Hide sensitive info"],
+      ["邮箱、网址、电话、数字和下面列出的词换成 [N1]、[T1] 这样的编号；同一个值编号相同，对照表只留在这台设备上。", "Emails, links, phone numbers, numbers and the words below become tags like [N1] and [T1]; the same value always gets the same tag, and the lookup table stays on this device."],
+      ["还要隐去的词", "Also hide these words"], ["用逗号分开，例如：Acme, Sarah, 项目代号", "Comma-separated, e.g. Acme, Sarah, project codename"],
+      ["哪里不好（可选）", "What felt wrong (optional)"], ["例如：第一句太长；没用上资料里的价格", "e.g. first line too long; didn't use the price from my materials"],
+      ["下载", "Download"], ["重答", "Re-answer"], ["调试包", "Debug"],
+      ["用现在的设置和提示词再答一次", "Answer again with the current settings and prompt"],
+      ["导出这次回答的提示词、资料和结果，方便调优", "Export this answer's prompt, materials and result for tuning"],
+      ["已载入内置提示词：改完后会替换内置提示词。", "Built-in prompt loaded: once edited, it replaces the built-in one."],
+      ["已恢复默认提示词。", "Prompt reset to default."], ["调试包请在主窗口打开。", "Open the debug bundle from the main window."],
+      ["已选中，请按 Ctrl/⌘+C 复制。", "Selected: press Ctrl/⌘+C to copy."], ["先问一个问题，再来重答。", "Ask a question first, then re-answer."],
       ["支持 Gemini、OpenAI、Claude、Deepgram（英文转写）、硅基流动、DeepSeek、智谱、通义千问，粘贴后自动识别。", "Works with Gemini, OpenAI, Claude, Deepgram (English transcription), SiliconFlow, DeepSeek, Zhipu and Qwen; detected automatically."],
       ["Deepgram Nova-3 实时转写（英文，最快）", "Deepgram Nova-3 streaming (English, fastest)"],
       ["Deepgram 连不上，已改用浏览器识别。", "Deepgram unavailable; switched to the browser recognizer."],

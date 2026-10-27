@@ -15,6 +15,9 @@ It's a single web page: no server, no build step. Everything runs in your browse
 ## Features
 
 - **Microphone first, no screen-share prompt**: *Start listening* uses only the microphone. On a call with headphones, tap **+ Meeting audio** at any time to add the meeting tab's sound (Chrome on desktop); Cue keeps the audio and drops the picture. On phones, the microphone hears everyone in the room.
+- **Edit the answer prompt yourself**: *Prep → Advanced* lets you add your own instructions after the built-in prompt, or replace it entirely (Cue still adds the answer language and the citation rule; `{lang}` becomes the answer language). *Load the built-in prompt* gives you a starting point, and *Re-answer* on any card tries your change on the same question.
+- **Debug bundle (D)**: exports exactly what was sent to the model for an answer (system and user prompt, retrieved passages with similarity, the answer, model and timings) plus an optional note on what felt wrong. *Hide sensitive info* replaces emails, links, phone numbers, numbers and words you list with consistent tags ([N1], [T1]…), so the bundle stays checkable without revealing values; API keys are always removed. Nothing is sent anywhere: you copy or download it.
+- **Speed first / Quality first**: quality mode starts the race with the stronger models (Claude, GPT, Gemini 3 Flash), gives them 2.5 s before a backup joins, and lets Gemini think a little more.
 - **Conversation context**: *Prep* has fields for who you're talking to, what it's about and what you want out of it; they go into every answer, follow-up, recap and speaker-labelling prompt.
 - **English-first prompts**: all prompts are written in English (models follow English instructions best), with a spoken-English style (short sentences, contractions, no filler). The answer language follows the conversation by default, so English questions get English answers and Chinese questions get Chinese answers.
 - **One-click prep before the meeting**: fill in who you're talking to and what it's about, and Cue predicts the 8 most likely questions with your answers; when one is asked, the prepared answer shows instantly.
@@ -111,6 +114,7 @@ Installers for macOS (.dmg), Windows (.exe) and Linux (.AppImage) are built by G
 - API keys live only in the page's memory unless you turn on *Remember the key*, in which case they're stored encrypted in this browser. They're never sent anywhere except the provider you chose. (The streaming connection passes the key in the WebSocket URL, which is how the Gemini Live API authenticates browsers.)
 - Materials, settings, history and learning data are stored in your browser (IndexedDB); Cue asks the browser to keep them persistent. *Prep → Back up everything* saves all of it (never API keys) in one JSON file that *Restore from backup* merges back. *Prep → Clear data in this browser* removes them.
 - Audio is sent only to the transcription provider you configured.
+- The debug bundle is built in the page and only leaves it when you copy or download it; the redaction lookup table is never exported.
 
 ## Deploying (GitHub Pages)
 
