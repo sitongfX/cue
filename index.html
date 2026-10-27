@@ -493,6 +493,11 @@
     details.adv > summary { cursor: pointer; list-style: revert; }
     details.adv[open] > summary { margin-bottom: 8px; }
     .dbg-preview { width: 100%; min-height: 220px; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-word; }
+      #briefInput { font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; min-height: 170px; }
+    .brief-out { margin-top: 10px; font-size: 13px; color: var(--text-2); line-height: 1.6; }
+    .brief-out b { color: var(--text); font-weight: 600; }
+    .brief-out ul { margin: 4px 0 0 18px; }
+    .brief-out .warn { color: var(--warn, #e0a030); }
   </style>
 </head>
 <body data-view="live" data-pane="stage">
@@ -729,6 +734,26 @@
           <div>
             <h1>准备</h1>
             <p class="sub">告诉 Cue 这次是什么场合，放入你的资料。资料越具体，回答越像你本人。</p>
+          </div>
+
+          <div class="card" id="briefCard">
+            <div class="row" style="justify-content: space-between;">
+              <div class="card-title">用 Agent 一键准备（推荐）</div>
+              <button class="chip" id="btnBriefFormat" type="button">插入格式模板</button>
+            </div>
+            <p class="help">① 复制提示词给你的 Agent（Gemini、Jetski、ChatGPT…），附上会议邀请、邮件、文档和笔记。② 把它生成的 Markdown 粘贴到下面，点「导入」：场合、对方、关于我、我的要求、可能被问的问题、关键事实和资料一次填好。也可以直接粘贴杂乱的笔记，Cue 会自己整理。</p>
+            <div class="row" style="gap: 6px;">
+              <button class="btn" id="btnBriefPrompt" type="button">复制给 Agent 的提示词</button>
+              <button class="btn" id="btnBriefExport" type="button">导出当前为 Brief</button>
+              <button class="btn" id="btnBriefDebrief" type="button">会后：交给 Agent 更新</button>
+            </div>
+            <textarea class="textarea" id="briefInput" placeholder="# Cue Brief&#10;## Context&#10;- Who: Sarah, Head of Procurement at Acme&#10;- Topic: Annual renewal&#10;- Goal: Renew at 15% off, no lower&#10;## Likely questions&#10;Q: Why is the price going up?&#10;A: …"></textarea>
+            <div class="row" style="gap: 6px;">
+              <button class="btn btn-primary" id="btnBriefImport" type="button">导入</button>
+              <button class="btn" id="btnBriefTidy" type="button">让 Cue 整理后导入</button>
+              <button class="btn btn-ghost" id="btnBriefUndo" type="button" hidden>撤销导入</button>
+            </div>
+            <div class="brief-out" id="briefOut" hidden></div>
           </div>
 
           <div class="card">
@@ -1738,6 +1763,7 @@
       let text = "";
       if (!isPdf) {
         text = new TextDecoder("utf-8").decode(buf);
+        if (/^\s*(?:```\w*\s*)?#\s*Cue Brief/i.test(text)) { $("briefInput").value = text; importBriefText(text); return; }
       } else {
         if (S.server.ok) {
           try {
@@ -1813,6 +1839,8 @@
       if (name === "我说过的回答") return "My past answers";
       if (name === "预演 · 可能被问的问题") return "Rehearsal · likely questions";
       if (name.indexOf("复盘 · ") === 0) return "Review · " + name.slice(5);
+      if (name === BRIEF_QA) return "Brief · likely questions";
+      if (name === BRIEF_FACTS) return "Brief · key facts";
       return name;
     }
     function renderDocs() {
@@ -2871,12 +2899,13 @@
       return r.json();
     }
 
+    const MAXTOK = { v: 900 };   // raised temporarily for long outputs (e.g. turning notes into a brief)
     async function streamGemini(key, model, sys, user, signal, onDelta) {
       const m = /^gemini/.test(model) ? model : PROVIDERS.gemini.model;
       const resp = await geminiFetch(m, "streamGenerateContent?alt=sse", {
         systemInstruction: { parts: [{ text: sys }] },
         contents: [{ role: "user", parts: [{ text: user }] }],
-        generationConfig: { temperature: 0.4, maxOutputTokens: 900 }
+        generationConfig: { temperature: 0.4, maxOutputTokens: MAXTOK.v }
       }, signal);
       if (!resp.ok || !resp.body) throw apiError("Gemini", resp.status, await errDetail(resp));
       await readStream(resp, function (line) {
@@ -2894,7 +2923,7 @@
     async function streamAnthropic(key, model, sys, user, signal, onDelta) {
       const resp = await fetch(cloudUrl("https://api.anthropic.com/v1/messages"), {
         method: "POST", signal: signal, headers: anthropicHeaders(key),
-        body: JSON.stringify({ model: /^claude/.test(model) ? model : PROVIDERS.anthropic.model, max_tokens: 900, temperature: 0.4, stream: true,
+        body: JSON.stringify({ model: /^claude/.test(model) ? model : PROVIDERS.anthropic.model, max_tokens: MAXTOK.v, temperature: 0.4, stream: true,
           system: sys, messages: [{ role: "user", content: user }] })
       });
       if (!resp.ok || !resp.body) throw apiError("Claude", resp.status, await errDetail(resp));
@@ -2911,7 +2940,7 @@
       const resp = await fetch(cloudUrl(url), {
         method: "POST", signal: signal,
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
-        body: JSON.stringify({ model: model, stream: true, temperature: 0.4, max_tokens: 900,
+        body: JSON.stringify({ model: model, stream: true, temperature: 0.4, max_tokens: MAXTOK.v,
           messages: [{ role: "system", content: sys }, { role: "user", content: user }] })
       });
       if (!resp.ok || !resp.body) {
@@ -3083,6 +3112,7 @@
           }).catch(function () {});
         } });
         actions.appendChild(mailBtn);
+        actions.appendChild(el("button", { class: "chip", type: "button", text: "交给 Agent", title: "复制对话和当前 Brief，让你的 Agent 更新 Brief、整理跟进事项", onclick: function () { copyDebrief(); } }));
       }
       if (a.kind === "answer") {
         actions.appendChild(el("button", { class: "chip", type: "button", title: "说到一半卡住或说错了：给你一句接下来能说的话", onclick: function () { rescue(a); } },
@@ -3362,6 +3392,7 @@
     function kbHeadline(hits) {
       if (hits.some(function (h) { return h.doc === MEMORY_DOC; })) return "你上次是这么答的";
       if (hits.some(function (h) { return h.doc === PREP_DOC; })) return "你演练过这道题";
+      if (hits.some(function (h) { return h.doc === BRIEF_QA; })) return "你的 Brief 里准备过";
       if (hits.some(function (h) { return h.doc.indexOf("复盘") === 0; })) return "你复盘过类似的问题";
       return "来自你的资料";
     }
@@ -6476,7 +6507,7 @@
       $("prepCard").hidden = !show;
       if (!show) return;
       const en = S.uiLang === "en";
-      const done = S.prepSig && S.prepSig === prepSignature() && S.docs.some(function (d) { return d.name === PREP_DOC; });
+      const done = S.prepSig && S.prepSig === prepSignature() && S.docs.some(function (d) { return d.name === PREP_DOC || d.name === BRIEF_QA; });
       const what = [who, topic].filter(Boolean).join(" · ") || (en ? "your materials" : "你的资料");
       $("prepDesc").textContent = done
         ? (en ? "Ready for " + what + ": likely questions and answers are prepared and will show instantly." : "已为「" + what + "」准备好：可能被问的问题和答案，现场被问到会立刻显示。")
@@ -6531,6 +6562,350 @@
     });
 
     // =====================================================================
+    // =====================================================================
+    // 15a. Cue Brief: one Markdown file an agent writes, Cue imports in one step
+    // =====================================================================
+    const BRIEF_PREFIX = "Brief · ";
+    const BRIEF_QA = "Brief · 可能被问的问题";
+    const BRIEF_FACTS = "Brief · 关键事实";
+    const BRIEF_TEMPLATE = [
+      "# Cue Brief",
+      "## Context",
+      "- Who: <name, role, company; what they care about>",
+      "- Topic: <what this conversation is about>",
+      "- Goal: <what I want out of it; my bottom line>",
+      "- Scenario: <meeting | sales | presentation | support | tech>",
+      "- Language: <auto | en | zh>",
+      "## About me",
+      "<who I am and my role, 2-5 lines>",
+      "## My instructions",
+      "<how my answers should sound, what to emphasise>",
+      "## Avoid",
+      "<things I must not say or promise>",
+      "## Likely questions",
+      "Q: <question they are likely to ask>",
+      "A: <what I would say: first person, spoken, 2-3 sentences, with the specific fact>",
+      "",
+      "Q: <next question>",
+      "A: <answer>",
+      "## Key facts",
+      "- <one fact per line: numbers, prices, dates, names, metrics>",
+      "## Materials: <short title>",
+      "<cleaned-up source content, short paragraphs, every number kept>",
+      "## Open questions",
+      "- <what I should find out or decide before the call>",
+      "## Hide in debug bundle",
+      "<sensitive names and codenames, comma-separated>"
+    ].join("\n");
+    const BRIEF_RULES = [
+      "Rules:",
+      "- Use only facts from my sources or what you can verify. Mark anything uncertain with (verify).",
+      "- Be concrete: names, numbers, prices, dates, timelines, metrics. No generic filler.",
+      "- Likely questions: 12-20 pairs, easy to hard, including 3-4 tough or skeptical ones. Each answer is what I would actually say out loud: first person, 2-3 sentences, with the specific fact.",
+      "- Key facts: one fact per line, so each can be matched on its own.",
+      "- Materials: one section per source, cleaned up into short paragraphs (no tables), keeping every number.",
+      "- Open questions: what I should find out or decide before the call.",
+      "- Hide in debug bundle: sensitive names and codenames, comma-separated.",
+      "- Keep the headings exactly as shown, in English; write the content in the language the conversation will be in. Leave out sections you have nothing for."
+    ].join("\n");
+
+    function briefPlaceholder(v) { return /^<[^>]*>$/.test(String(v).trim()) || /^[-•*]?\s*$/.test(String(v).trim()); }
+    const BRIEF_SCEN = { meeting: "meeting", sales: "sales", client: "sales", presentation: "presentation", talk: "presentation", support: "support", tech: "tech", technical: "tech",
+      "会议": "meeting", "销售": "sales", "客户": "sales", "演讲": "presentation", "答疑": "support", "客服": "support", "技术": "tech" };
+    const BRIEF_LANG = { auto: "auto", en: "en", english: "en", "英文": "en", "英语": "en", zh: "zh", chinese: "zh", "中文": "zh", bilingual: "bilingual", "双语": "bilingual" };
+
+    // Parses the Markdown brief. Returns null when it has no recognisable sections.
+    function parseBrief(md) {
+      const text = String(md || "").replace(/\r\n?/g, "\n").replace(/^\s*```\w*\s*$/gm, "");
+      const secs = [];
+      let cur = null;
+      text.split("\n").forEach(function (line) {
+        const m = line.match(/^\s*#{1,4}\s+(.+?)\s*#*\s*$/);
+        if (m) {
+          if (/^cue brief\b/i.test(m[1])) return;
+          cur = { h: m[1].replace(/\*\*/g, "").replace(/^\d+[.)、]\s*/, "").replace(/[:：]\s*$/, "").trim(), body: [] };
+          secs.push(cur);
+          return;
+        }
+        if (cur) cur.body.push(line);
+      });
+      if (!secs.length) return null;
+      const b = { ctx: {}, about: "", instr: "", avoid: "", qa: [], facts: [], mats: [], hide: [], open: [],
+        verify: (text.match(/\((?:verify|待核实)\)|（待核实）/gi) || []).length };
+      const listLines = function (body) {
+        return body.split("\n").map(function (l) { return l.replace(/^\s*(?:[-*•]|\d+[.)、])\s*/, "").replace(/\*\*/g, "").trim(); })
+          .filter(function (l) { return l && !briefPlaceholder(l); });
+      };
+      secs.forEach(function (sec) {
+        const h = sec.h, body = sec.body.join("\n").trim();
+        if (!body || briefPlaceholder(body)) return;
+        const mat = h.match(/^(?:materials?|资料|source)\s*[:：\-–—]\s*(.+)$/i);
+        if (mat || /^(?:materials?|资料|sources?)$/i.test(h)) {
+          b.mats.push({ title: (mat ? mat[1] : "Materials").replace(/^<.*>$/, "Materials").trim().slice(0, 80), text: body });
+        } else if (/^(?:context|conversation|背景|场合|这次)/i.test(h)) {
+          body.split("\n").forEach(function (l) {
+            const kv = l.replace(/\*\*/g, "").match(/^\s*[-*•]?\s*([^:：]{1,24}?)\s*[:：]\s*(.+)$/);
+            if (!kv || briefPlaceholder(kv[2])) return;
+            const k = kv[1].toLowerCase().trim(), v = kv[2].trim();
+            if (/^(who|other side|对方|对方是谁|对象)/.test(k)) b.ctx.who = v;
+            else if (/^(topic|subject|主题|聊什么|话题)/.test(k)) b.ctx.topic = v;
+            else if (/^(goal|objective|目标|我想达成)/.test(k)) b.ctx.goal = v;
+            else if (/^(scenario|type|场景)/.test(k)) b.ctx.scenario = v;
+            else if (/^(language|lang|语言)/.test(k)) b.ctx.lang = v;
+          });
+        } else if (/^(?:about me|关于我|我是谁)/i.test(h)) {
+          b.about = body;
+        } else if (/^(?:my instructions|instructions|rules|style|提示词|我的要求|回答要求)/i.test(h)) {
+          b.instr = body;
+        } else if (/^(?:avoid|don'?t say|never say|不要说|避免|禁忌)/i.test(h)) {
+          b.avoid = listLines(body).join("\n");
+        } else if (/^(?:likely questions|questions|q\s*&\s*a|faq|问答|可能被问)/i.test(h)) {
+          const t = "\n" + body.replace(/\*\*/g, "");
+          const re = /\n\s*(?:Q\d*|问)\s*[:：]\s*([\s\S]*?)\n\s*(?:A\d*|答)\s*[:：]\s*([\s\S]*?)(?=\n\s*(?:Q\d*|问)\s*[:：]|$)/g;
+          let m;
+          while ((m = re.exec(t))) {
+            const q = m[1].trim(), a = m[2].trim();
+            if (q && a && !briefPlaceholder(q) && !briefPlaceholder(a)) b.qa.push({ q: q, a: a });
+          }
+        } else if (/^(?:key facts|facts|numbers|关键事实|事实|数字)/i.test(h)) {
+          b.facts = b.facts.concat(listLines(body));
+        } else if (/^(?:open questions|gaps|to find out|to clarify|待确认|缺口|开会前确认)/i.test(h)) {
+          b.open = b.open.concat(listLines(body));
+        } else if (/^(?:hide|sensitive|redact|隐去|敏感)/i.test(h)) {
+          b.hide = body.split(/[,，;；、\n]/).map(function (x) { return x.replace(/^\s*[-*•]\s*/, "").trim(); }).filter(function (x) { return x && !briefPlaceholder(x); });
+        } else {
+          b.mats.push({ title: h.slice(0, 80), text: body });   // unknown heading: keep it as material rather than drop it
+        }
+      });
+      const any = b.about || b.instr || b.avoid || b.qa.length || b.facts.length || b.mats.length || b.open.length || Object.keys(b.ctx).length;
+      return any ? b : null;
+    }
+
+    function selectHas(id, v) { return Array.prototype.some.call($(id).options, function (o) { return o.value === v; }); }
+    function applyBrief(b) {
+      S.briefUndo = { who: $("ctxWho").value, topic: $("ctxTopic").value, goal: $("ctxGoal").value, scen: $("scenarioSel").value, lang: $("langSel").value,
+        bg: $("bgInput").value, pc: $("promptCustom").value, pm: $("promptMode").value, terms: $("dbgTerms").value, docs: S.docs.slice(), prepSig: S.prepSig };
+      const got = [], en = S.uiLang === "en";
+      if (b.ctx.who) { $("ctxWho").value = b.ctx.who.slice(0, 300); got.push(en ? "who" : "对方"); }
+      if (b.ctx.topic) { $("ctxTopic").value = b.ctx.topic.slice(0, 300); got.push(en ? "topic" : "主题"); }
+      if (b.ctx.goal) { $("ctxGoal").value = b.ctx.goal.slice(0, 300); got.push(en ? "goal" : "目标"); }
+      const sc = b.ctx.scenario && BRIEF_SCEN[b.ctx.scenario.toLowerCase().split(/[\s|/,]/)[0]];
+      if (sc && selectHas("scenarioSel", sc)) { $("scenarioSel").value = sc; got.push(en ? "scenario" : "场景"); }
+      const lg = b.ctx.lang && BRIEF_LANG[b.ctx.lang.toLowerCase().split(/[\s|/,]/)[0]];
+      if (lg && selectHas("langSel", lg)) $("langSel").value = lg;
+      if (b.about) { $("bgInput").value = b.about.slice(0, 2000); got.push(en ? "about me" : "关于我"); }
+      if (b.instr || b.avoid) {
+        $("promptCustom").value = [b.instr, b.avoid ? "Never say or promise any of these:\n" + b.avoid : ""].filter(Boolean).join("\n\n").slice(0, 4000);
+        $("promptMode").value = "append";
+        $("promptAdv").open = true;
+        got.push(en ? "your instructions" : "我的要求");
+      }
+      if (b.hide.length) {
+        const have = dbgTermsList().map(function (x) { return x.trim(); }).filter(Boolean);
+        b.hide.forEach(function (x) { if (have.indexOf(x) === -1) have.push(x); });
+        $("dbgTerms").value = have.join(", ");
+      }
+      // Replace the previous brief's documents; everything else stays.
+      S.docs = S.docs.filter(function (d) { return d.name.indexOf(BRIEF_PREFIX) !== 0; });
+      if (b.qa.length) S.docs.push({ name: BRIEF_QA, text: b.qa.map(function (p) { return "Q: " + p.q + "\nA: " + p.a; }).join("\n\n").slice(0, 200000) });
+      if (b.facts.length) S.docs.push({ name: BRIEF_FACTS, text: b.facts.map(function (f) { return "- " + f; }).join("\n").slice(0, 200000) });
+      b.mats.forEach(function (m) {
+        let name = BRIEF_PREFIX + m.title, i = 2;
+        while (S.docs.some(function (d) { return d.name === name; })) name = BRIEF_PREFIX + m.title + " " + (i++);
+        S.docs.push({ name: name, text: m.text.slice(0, 200000) });
+      });
+      rebuildChunks();
+      renderDocs();
+      renderReady();
+      if (b.qa.length) S.prepSig = prepSignature();
+      renderPrepCard();
+      persistKb();
+      $("btnBriefUndo").hidden = false;
+      return got;
+    }
+
+    function showBriefResult(b, got) {
+      const en = S.uiLang === "en";
+      const out = $("briefOut");
+      const parts = got.slice();
+      if (b.qa.length) parts.push(b.qa.length + (en ? " likely questions" : " 条问答"));
+      if (b.facts.length) parts.push(b.facts.length + (en ? " facts" : " 条事实"));
+      if (b.mats.length) parts.push(b.mats.length + (en ? " materials" : " 份资料"));
+      if (b.hide.length) parts.push(b.hide.length + (en ? " words to hide" : " 个隐去词"));
+      const kids = [el("div", null, el("b", { text: en ? "Imported: " : "已导入：" }), document.createTextNode(parts.join(en ? ", " : "、") || (en ? "nothing recognisable" : "没有可识别的内容")))];
+      if (b.qa.length) kids.push(el("div", { text: en ? "When one of these questions comes up, your prepared answer shows instantly." : "现场被问到这些问题时，你准备好的回答会立刻显示。" }));
+      if (b.verify) kids.push(el("div", { class: "warn", text: (en ? "⚠ " + b.verify + " item(s) marked (verify): check them before the call." : "⚠ 有 " + b.verify + " 处标了 (verify)，开会前核实一下。") }));
+      if (b.open.length) {
+        kids.push(el("div", null, el("b", { text: en ? "Find out before the call:" : "开会前最好确认：" })));
+        const ul = el("ul");
+        b.open.slice(0, 8).forEach(function (o) { ul.appendChild(el("li", { text: o })); });
+        kids.push(ul);
+      }
+      out.replaceChildren.apply(out, kids);
+      out.hidden = false;
+    }
+
+    function importBriefText(text) {
+      const b = parseBrief(text);
+      if (!b) return false;
+      const got = applyBrief(b);
+      showBriefResult(b, got);
+      toast(S.uiLang === "en" ? "Brief imported." : "Brief 已导入。");
+      return true;
+    }
+
+    // Messy notes (emails, invite, docs) → a brief, written by the model, then imported.
+    const BRIEF_SYS = "You turn my messy notes into a Cue Brief for a live conversation. Output ONLY the brief, in exactly this Markdown structure:\n\n" +
+      BRIEF_TEMPLATE + "\n\n" + BRIEF_RULES + "\n- Use only information in my notes; never invent facts. If the notes imply likely questions, write 8-15 Q/A pairs answered from the notes.";
+    async function briefFromRaw(raw) {
+      if (!aiReady()) { toast("整理需要先设置 AI 模型。"); openDrawer("model"); return; }
+      const btn = $("btnBriefTidy");
+      btn.disabled = true; btn.textContent = S.uiLang === "en" ? "Tidying…" : "整理中…";
+      const ctl = new AbortController();
+      let out = "";
+      MAXTOK.v = 8000;
+      try {
+        const c = S.keys.gemini ? { provider: "gemini", model: "gemini-3-flash-preview", key: "gemini:gemini-3-flash-preview" } : null;
+        const user = (ctxBlock() ? ctxBlock() + "\n\n" : "") + "[My notes]\n" + String(raw).slice(0, 60000);
+        const onDelta = function (d) { out += d; $("briefInput").value = out; };
+        if (c) await streamOne(c, BRIEF_SYS, user, ctl.signal, onDelta);
+        else await streamAnswer(BRIEF_SYS, user, ctl.signal, onDelta);
+        if (!importBriefText(out)) toast(S.uiLang === "en" ? "Couldn't turn that into a brief. Try adding headings." : "没能整理成 Brief，可以加几个标题再试。");
+      } catch (e) {
+        toast((S.uiLang === "en" ? "Tidy failed: " : "整理失败：") + errMsg(e));
+      } finally {
+        MAXTOK.v = 900;
+        btn.disabled = false; btn.textContent = S.uiLang === "en" ? "Tidy with Cue, then import" : "让 Cue 整理后导入";
+      }
+    }
+
+    function exportBrief() {
+      const scen = $("scenarioSel").value, lang = $("langSel").value;
+      const L = ["# Cue Brief", "## Context"];
+      if ($("ctxWho").value.trim()) L.push("- Who: " + $("ctxWho").value.trim());
+      if ($("ctxTopic").value.trim()) L.push("- Topic: " + $("ctxTopic").value.trim());
+      if ($("ctxGoal").value.trim()) L.push("- Goal: " + $("ctxGoal").value.trim());
+      L.push("- Scenario: " + scen, "- Language: " + lang);
+      if ($("bgInput").value.trim()) L.push("## About me", $("bgInput").value.trim());
+      if (customPromptText()) L.push("## My instructions", customPromptText());
+      const qa = S.docs.filter(function (d) { return d.name === BRIEF_QA || d.name === PREP_DOC; }).map(function (d) { return d.text; }).join("\n\n");
+      if (qa) L.push("## Likely questions", qa);
+      const facts = S.docs.find(function (d) { return d.name === BRIEF_FACTS; });
+      if (facts) L.push("## Key facts", facts.text);
+      S.docs.forEach(function (d) {
+        if (d.name === BRIEF_QA || d.name === PREP_DOC || d.name === BRIEF_FACTS || isDemoDoc(d.name)) return;
+        const title = d.name.indexOf(BRIEF_PREFIX) === 0 ? d.name.slice(BRIEF_PREFIX.length) : d.name;
+        L.push("## Materials: " + title, d.name === MEMORY_DOC ? d.text.slice(-6000) : d.text);
+      });
+      if ($("dbgTerms").value.trim()) L.push("## Hide in debug bundle", $("dbgTerms").value.trim());
+      return L.join("\n");
+    }
+
+    function agentPrompt() {
+      const known = [];
+      if ($("ctxWho").value.trim()) known.push("- Who: " + $("ctxWho").value.trim());
+      if ($("ctxTopic").value.trim()) known.push("- Topic: " + $("ctxTopic").value.trim());
+      if ($("ctxGoal").value.trim()) known.push("- Goal: " + $("ctxGoal").value.trim());
+      if ($("bgInput").value.trim()) known.push("- About me: " + $("bgInput").value.trim().slice(0, 600));
+      return [
+        "Prepare me for a live conversation. I'll use Cue, a real-time assistant that listens to the call and shows me what to say, grounded in the brief you write now.",
+        "",
+        "Write a \"Cue Brief\" in Markdown using EXACTLY this structure:",
+        "",
+        "```markdown", BRIEF_TEMPLATE, "```",
+        "",
+        BRIEF_RULES,
+        "- If I give you an existing Cue Brief, update it and keep its structure.",
+        "- Output only the brief, in one Markdown code block, so I can paste it straight into Cue.",
+        "",
+        "What I already know:",
+        known.length ? known.join("\n") : "- (nothing yet: work it out from my sources)",
+        "",
+        "My sources (meeting invite, email threads, docs, notes, LinkedIn, previous meeting notes, what I must not say):",
+        "[paste or attach them here]"
+      ].join("\n");
+    }
+
+    function copyText(text, okMsg) {
+      if (!navigator.clipboard) { $("briefInput").value = text; toast(S.uiLang === "en" ? "Copy it from the box below." : "请从下面的输入框里复制。"); return; }
+      navigator.clipboard.writeText(text).then(function () { toast(okMsg); })
+        .catch(function () { $("briefInput").value = text; toast(S.uiLang === "en" ? "Copy it from the box below." : "请从下面的输入框里复制。"); });
+    }
+    function copyDebrief() {
+      if (!S.utts.length && !S.answers.length) { toast(S.uiLang === "en" ? "No conversation yet: this is for after a call." : "还没有对话：这个按钮是会后用的。"); return; }
+      copyText([
+        "I just finished a conversation where I used Cue, a real-time answer assistant. Below are my current Cue Brief and what happened in the conversation.",
+        "Return the full UPDATED Cue Brief, in exactly the same Markdown structure, in one code block:",
+        "- Add the questions they actually asked to Likely questions, each with the best answer (improve on what I said; keep facts accurate).",
+        "- Add new facts, numbers and commitments to Key facts; add anything I shouldn't say again to Avoid.",
+        "- Replace Open questions with my follow-ups (who / what / when).",
+        "- Keep everything else unless the conversation shows it's wrong.",
+        "After the brief, list my follow-ups and draft a short follow-up email.",
+        "",
+        "[Current Cue Brief]", "```markdown", exportBrief(), "```",
+        "",
+        "[The conversation]", buildMarkdown()
+      ].join("\n"), S.uiLang === "en" ? "Copied: paste it to your agent, then paste the updated brief back here." : "已复制：发给你的 Agent，再把更新后的 Brief 贴回这里导入。");
+    }
+
+    $("btnBriefFormat").addEventListener("click", function () {
+      if (!$("briefInput").value.trim()) { $("briefInput").value = BRIEF_TEMPLATE; $("briefInput").focus(); return; }
+      copyText(BRIEF_TEMPLATE, S.uiLang === "en" ? "Template copied." : "格式模板已复制。");
+    });
+    $("btnBriefPrompt").addEventListener("click", function () {
+      copyText(agentPrompt(), S.uiLang === "en" ? "Copied: paste it to your agent with your files, then paste its answer here." : "已复制：连同你的文件一起发给 Agent，再把它的回答贴到这里。");
+    });
+    $("btnBriefExport").addEventListener("click", function () {
+      $("briefInput").value = exportBrief();
+      copyText($("briefInput").value, S.uiLang === "en" ? "Current setup copied as a brief." : "已把当前设置导出为 Brief 并复制。");
+    });
+    $("btnBriefDebrief").addEventListener("click", copyDebrief);
+    $("btnBriefImport").addEventListener("click", function () {
+      const t = $("briefInput").value.trim();
+      if (!t) { toast(S.uiLang === "en" ? "Paste a brief (or any notes) first." : "先粘贴 Brief（或任何笔记）。"); return; }
+      if (importBriefText(t)) return;
+      // Not in brief format: let the model structure it.
+      toast(S.uiLang === "en" ? "Not in brief format: tidying it with Cue…" : "不是 Brief 格式，正在让 Cue 整理…");
+      briefFromRaw(t);
+    });
+    $("btnBriefTidy").addEventListener("click", function () {
+      const t = $("briefInput").value.trim();
+      if (!t) { toast(S.uiLang === "en" ? "Paste your notes first." : "先粘贴你的笔记。"); return; }
+      briefFromRaw(t);
+    });
+    $("btnBriefUndo").addEventListener("click", function () {
+      const u = S.briefUndo;
+      if (!u) return;
+      $("ctxWho").value = u.who; $("ctxTopic").value = u.topic; $("ctxGoal").value = u.goal; $("scenarioSel").value = u.scen; $("langSel").value = u.lang;
+      $("bgInput").value = u.bg; $("promptCustom").value = u.pc; $("promptMode").value = u.pm; $("dbgTerms").value = u.terms;
+      S.docs = u.docs; S.prepSig = u.prepSig; S.briefUndo = null;
+      rebuildChunks(); renderDocs(); renderReady(); renderPrepCard(); persistKb();
+      $("btnBriefUndo").hidden = true; $("briefOut").hidden = true;
+      toast(S.uiLang === "en" ? "Import undone." : "已撤销导入。");
+    });
+
+    // An agent or script can hand over a brief as a link: https://…/cue/#brief=<base64url of the Markdown>.
+    // The part after # never reaches the server. It is only filled in, never imported without your click.
+    function b64urlToText(s) {
+      s = s.replace(/-/g, "+").replace(/_/g, "/");
+      while (s.length % 4) s += "=";
+      const bin = atob(s);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return new TextDecoder("utf-8").decode(bytes);
+    }
+    function checkHashBrief() {
+      const m = (location.hash || "").match(/^#brief=(.+)$/);
+      if (!m) return;
+      try {
+        $("briefInput").value = b64urlToText(decodeURIComponent(m[1])).slice(0, 200000);
+        showView("prep");
+        toast(S.uiLang === "en" ? "A brief arrived: check it, then tap Import." : "收到一份 Brief：检查后点「导入」。", 6000);
+      } catch (_) { toast(S.uiLang === "en" ? "Couldn't read the brief in this link." : "链接里的 Brief 无法读取。"); }
+      try { history.replaceState(null, "", location.pathname + location.search); } catch (_) {}
+    }
+    setTimeout(checkHashBrief, 700);
+
     // =====================================================================
     // 15b. My own prompt, re-answer, and the debug bundle
     // =====================================================================
@@ -6858,6 +7233,14 @@
       ["正在评估…", "Evaluating…"], ["评估失败：", "Evaluation failed: "], ["得分 ", "Score "], ["已评估", "Evaluated"],
       ["这个浏览器不支持语音识别：请在设置里填 Gemini Key，或直接打字。", "This browser has no speech recognition: add a Gemini key in Settings, or type."],
       ["练习 · ", "Practice · "],
+      ["用 Agent 一键准备（推荐）", "Prepare with your agent (recommended)"], ["插入格式模板", "Insert template"],
+      ["① 复制提示词给你的 Agent（Gemini、Jetski、ChatGPT…），附上会议邀请、邮件、文档和笔记。② 把它生成的 Markdown 粘贴到下面，点「导入」：场合、对方、关于我、我的要求、可能被问的问题、关键事实和资料一次填好。也可以直接粘贴杂乱的笔记，Cue 会自己整理。",
+        "1) Copy the prompt to your agent (Gemini, Jetski, ChatGPT…) together with the meeting invite, emails, docs and notes. 2) Paste the Markdown it writes below and tap Import: scenario, who, about me, your instructions, likely questions, key facts and materials are filled in at once. You can also paste messy notes and Cue will structure them."],
+      ["复制给 Agent 的提示词", "Copy prompt for your agent"], ["导出当前为 Brief", "Export current setup as a brief"], ["会后：交给 Agent 更新", "After the call: update via agent"],
+      ["导入", "Import"], ["让 Cue 整理后导入", "Tidy with Cue, then import"], ["撤销导入", "Undo import"],
+      ["交给 Agent", "Hand to agent"], ["复制对话和当前 Brief，让你的 Agent 更新 Brief、整理跟进事项", "Copy the conversation and current brief so your agent can update the brief and list follow-ups"],
+      ["你的 Brief 里准备过", "Prepared in your brief"], ["整理需要先设置 AI 模型。", "Set up an AI model to tidy notes."],
+
       ["高级：自己改回答提示词", "Advanced: edit the answer prompt yourself"],
       ["加在内置提示词后面（推荐）", "Add after the built-in prompt (recommended)"],
       ["完全替换内置提示词", "Replace the built-in prompt"],
