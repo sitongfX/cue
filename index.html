@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob: mediastream:; connect-src 'self' http://127.0.0.1:* http://localhost:* https://generativelanguage.googleapis.com wss://generativelanguage.googleapis.com https://*.run.app https://api.openai.com https://api.anthropic.com wss://api.deepgram.com https://api.deepseek.com https://api.siliconflow.cn https://open.bigmodel.cn https://dashscope.aliyuncs.com;" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob: mediastream:; connect-src 'self' http://127.0.0.1:* http://localhost:* https://generativelanguage.googleapis.com wss://generativelanguage.googleapis.com https://*.run.app https://api.openai.com https://api.anthropic.com https://api.groq.com wss://api.deepgram.com https://api.deepseek.com https://api.siliconflow.cn https://open.bigmodel.cn https://dashscope.aliyuncs.com;" />
   <title>Cue · 实时回答提示</title>
   <meta name="theme-color" content="#0d0e0c" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -510,6 +510,12 @@
     .gap-tag.ok { color: #9ccc65; border-color: rgba(156, 204, 101, .45); }
     .gap-fill { display: flex; gap: 6px; }
     .gap-fill .input { flex: 1; }
+      .saved-keys { margin-top: 10px; display: grid; gap: 6px; }
+    .saved-keys .sk-title { font-size: 12.5px; color: var(--text-2); }
+    .sk-row { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line-2); border-radius: 10px; padding: 6px 10px; font-size: 13px; }
+    .sk-row .sk-name { font-weight: 600; }
+    .sk-row .sk-mask { color: var(--text-2); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; flex: 1; }
+    .sk-row .chip { padding: 2px 8px; }
   </style>
 </head>
 <body data-view="live" data-pane="stage">
@@ -646,9 +652,10 @@
                       <div class="step-title">AI Key</div>
                       <div class="step-desc" id="stepAiDesc">粘贴一个 API Key，自动识别是哪家服务</div>
                       <div class="row step-key" id="stepKeyRow">
-                        <input class="input" id="readyKey" type="password" placeholder="粘贴 Gemini / 硅基流动 / DeepSeek / 智谱 / 通义 Key" autocomplete="off" />
+                        <input class="input" id="readyKey" type="password" placeholder="粘贴 Gemini / OpenAI / Claude / Groq / Deepgram Key" autocomplete="off" />
                         <button class="btn btn-primary" id="btnReadyKey" type="button">保存</button>
                       </div>
+                      <label class="row step-remember" style="gap: 6px; font-size: 12.5px; color: var(--text-2); margin-top: 6px;"><input id="chkRememberKey2" type="checkbox" style="width: 16px; height: 16px; accent-color: var(--accent);" /> 记住我的 Key（加密保存在这个浏览器）</label>
                     </div>
                     <div class="step-actions"><button class="btn" type="button" data-open-tab="model">设置</button></div>
                   </div>
@@ -976,8 +983,9 @@
             <input class="input" id="keyInput" type="password" placeholder="粘贴任意 API Key，自动识别是哪家服务" autocomplete="off" />
             <button class="btn btn-primary" id="btnSaveKey" type="button">保存</button>
           </div>
-          <span class="help" id="keyHelp">支持 Gemini、OpenAI、Claude、Deepgram（英文转写）、硅基流动、DeepSeek、智谱、通义千问，粘贴后自动识别。</span>
+          <span class="help" id="keyHelp">支持 Gemini、OpenAI、Claude、Groq、Deepgram（英文转写）、硅基流动、DeepSeek、智谱、通义千问，可以同时保存多个，粘贴后自动识别。</span>
           <label class="row" style="gap: 6px; font-size: 13px; color: var(--text-2); margin-top: 6px;"><input id="chkRememberKey" type="checkbox" style="width: 18px; height: 18px; accent-color: var(--accent);" /> 在这个浏览器记住 Key（加密保存，取消勾选即删除）</label>
+          <div class="saved-keys" id="savedKeys" hidden></div>
         </div>
         <div class="field">
           <span class="label">AI 服务 <span class="help">（自动识别，也可以手动选）</span></span>
@@ -998,6 +1006,8 @@
             <option value="glm-4-flash"></option>
             <option value="qwen-plus"></option>
             <option value="qwen2.5:7b"></option>
+            <option value="llama-3.3-70b-versatile"></option>
+            <option value="openai/gpt-oss-120b"></option>
           </datalist>
         </div>
         <div class="switch">
@@ -1391,7 +1401,7 @@
     if (window.location && window.location.hostname) LOCAL_HOSTS.add(window.location.hostname.toLowerCase());
     const CLOUD_HOSTS = new Set([
       "generativelanguage.googleapis.com", "api.deepseek.com", "api.siliconflow.cn",
-      "open.bigmodel.cn", "dashscope.aliyuncs.com", "api.openai.com", "api.anthropic.com", "api.deepgram.com"
+      "open.bigmodel.cn", "dashscope.aliyuncs.com", "api.openai.com", "api.anthropic.com", "api.groq.com", "api.deepgram.com"
     ]);
     // Hosted as a web app over HTTPS (e.g. Zipline): no local server, save data in this browser.
     const HOSTED = window.location.protocol === "https:" && !LOCAL_HOSTS_STATIC.has(window.location.hostname);
@@ -1451,6 +1461,8 @@
         url: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions" },
       openai: { name: "OpenAI", desc: "GPT 回答（可参与抢答）", model: "gpt-4.1-mini",
         keyHelp: "以 sk-proj- 或 sk- 开头，在 platform.openai.com 获取。", url: "https://api.openai.com/v1/chat/completions" },
+      groq: { name: "Groq", desc: "极快的开源模型（Llama / GPT-OSS），可参与抢答", tag: "极快", model: "llama-3.3-70b-versatile",
+        keyHelp: "以 gsk_ 开头，在 console.groq.com 获取。", url: "https://api.groq.com/openai/v1/chat/completions" },
       anthropic: { name: "Claude", desc: "Anthropic Claude 回答（可参与抢答）", model: "claude-haiku-4-5",
         keyHelp: "以 sk-ant- 开头，在 console.anthropic.com 获取。" },
       ollama: { name: "本地 Ollama", desc: "完全离线，无需 Key", model: "qwen2.5:7b", noKey: true,
@@ -1470,7 +1482,7 @@
       lastInterimAt: {},
       provider: "gemini",
       model: PROVIDERS.gemini.model,
-      keys: { gemini: "", siliconflow: "", deepseek: "", zhipu: "", qwen: "", openai: "", anthropic: "", deepgram: "" },
+      keys: { gemini: "", siliconflow: "", deepseek: "", zhipu: "", qwen: "", openai: "", anthropic: "", groq: "", deepgram: "" },
       server: { ok: false, sttReady: false, gemini: false, deepseek: false, ollama: false },
       ollamaDirect: false,
       source: "inperson",
@@ -1901,14 +1913,16 @@
       if (!S.detecting) {
         $("keyHelp").textContent = S.keys[S.provider]
           ? "当前使用：" + p.name + "（" + maskKey(S.keys[S.provider]) + "）。粘贴新的 Key 会自动识别并切换。"
-          : "支持 Gemini、OpenAI、Claude、Deepgram（英文转写）、硅基流动、DeepSeek、智谱、通义千问，粘贴后自动识别。";
+          : "支持 Gemini、OpenAI、Claude、Groq、Deepgram（英文转写）、硅基流动、DeepSeek、智谱、通义千问，可以同时保存多个，粘贴后自动识别。";
       }
       if (document.activeElement !== $("modelInput")) $("modelInput").value = S.model;
       const ready = aiReady();
       $("aiStatusTitle").textContent = ready ? ("已就绪 · " + p.name) : "未连接";
+      const kept = $("chkRememberKey").checked ? "Key 已加密保存在这个浏览器里。" : "Key 只保存在当前页面的内存里，关闭页面即清除。";
       $("aiStatusDesc").textContent = ready
-        ? ("模型：" + S.model + "。Key 只保存在当前页面的内存里。")
-        : (p.noKey ? "没有检测到本机 Ollama（127.0.0.1:11434）。请先运行 ollama serve。" : "Key 只保存在当前页面的内存里，关闭页面即清除。");
+        ? ("模型：" + S.model + "。" + kept)
+        : (p.noKey ? "没有检测到本机 Ollama（127.0.0.1:11434）。请先运行 ollama serve。" : kept);
+      renderSavedKeys();
     }
 
     function selectProvider(key) {
@@ -3041,7 +3055,7 @@
         fetch(ca.base + "/v1/health", { headers: { "Authorization": "Bearer " + ca.secret } }).catch(function () {});
         return;
       }
-      [["anthropic", "https://api.anthropic.com/v1/models"], ["openai", "https://api.openai.com/v1/models"]].forEach(function (p) {
+      [["anthropic", "https://api.anthropic.com/v1/models"], ["openai", "https://api.openai.com/v1/models"], ["groq", "https://api.groq.com/openai/v1/models"]].forEach(function (p) {
         if (S.keys[p[0]]) fetch(cloudUrl(p[1]), { mode: "no-cors", cache: "no-store" }).catch(function () {});
       });
       if (!S.keys.gemini || Date.now() - warmedAt < 20000) return;
@@ -3642,6 +3656,7 @@
     function keyCandidates(k) {
       if (parseInvite(k)) return ["cue"];
       if (/^sk-ant-/.test(k)) return ["anthropic"];
+      if (/^gsk_/.test(k)) return ["groq"];
       if (/^sk-proj-/.test(k)) return ["openai"];
       if (/^[0-9a-f]{40}$/i.test(k)) return ["deepgram"];
       if (/^(AIza[0-9A-Za-z_-]{20,}|AQ\.[0-9A-Za-z_.-]{20,})$/.test(k)) return ["gemini"];
@@ -3670,6 +3685,7 @@
           return ra.ok;
         }
         if (provider === "deepgram") return await deepgramWorks(k);
+        if (provider === "groq") return await groqPickModel(k, sig);
         if (provider === "gemini") {
           const r = await fetch(cloudUrl("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1"),
             { headers: { "x-goog-api-key": k }, signal: sig });
@@ -3737,6 +3753,7 @@
       persistKb();
       scheduleSemIndex();
       if ($("chkRememberKey").checked) vaultSave().catch(function () { toast("这个浏览器不能加密保存 Key。"); });
+      else hintRemember();
       toast(det.verified
         ? "已识别为 " + PROVIDERS[p].name + "，Key 可以用。"
         : "没能验证这个 Key（可能无效，或网络不通）。按格式先当作 " + PROVIDERS[p].name + "，不对的话请在下面手动选择。", det.verified ? 3800 : 7000);
@@ -4902,6 +4919,8 @@
           if (data.model) S.model = data.model;
         }
         $("chkRememberKey").checked = true;
+        $("chkRememberKey2").checked = true;
+        if (S.keys.groq) groqPickModel(S.keys.groq).then(function () { renderProviders(); }).catch(function () {});
         renderProviders(); renderReady(); refreshStatus();
         setTimeout(warmUp, 50);
       } catch (_) { /* nothing saved, or storage unavailable */ }
@@ -6095,7 +6114,7 @@
     const FAST_GEMINI = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3-flash-preview", "gemini-flash-lite-latest"];
     const RACE = { hedgeMs: 650, qualityHedgeMs: 2500, stats: {} };   // stats[key] = moving average of time to first words (ms)
     // "Quality first": better writers lead the race; the fast ones only step in if they're silent.
-    const QUALITY_ORDER = ["anthropic:", "openai:", "gemini:gemini-3-flash-preview", "cue:gemini-3-flash-preview"];
+    const QUALITY_ORDER = ["anthropic:", "openai:", "gemini:gemini-3-flash-preview", "cue:gemini-3-flash-preview", "groq:"];
     // Gemini 3 Flash thinks more in quality mode, so its timing is tracked separately there.
     function statKey(c) { return c.key + ($("prioSel").value === "quality" && /^gemini:gemini-3[\w.-]*-(?:flash(?!-lite)|pro)/.test(c.key) ? "#q" : ""); }   // stats[key] = moving average of time to first words (ms)
     function raceCandidates() {
@@ -6110,7 +6129,7 @@
         const prov = S.keys.gemini ? "gemini" : "cue";
         FAST_GEMINI.forEach(function (m) { add(prov, m); });
       }
-      ["openai", "anthropic", "siliconflow", "deepseek", "zhipu", "qwen"].forEach(function (p) { if (S.keys[p]) add(p, PROVIDERS[p].model); });
+      ["openai", "anthropic", "groq", "siliconflow", "deepseek", "zhipu", "qwen"].forEach(function (p) { if (S.keys[p]) add(p, PROVIDERS[p].model); });
       // Fastest first (by what we've measured on this connection); the configured model breaks ties.
       const qRank = function (c) {
         if ($("prioSel").value !== "quality") return 0;
@@ -6578,6 +6597,74 @@
     });
 
     // =====================================================================
+    // ---- Saved keys: every provider key you've added, side by side ----
+    function keyName(k) { return k === "deepgram" ? "Deepgram" : (k === "cue" ? "Cue Cloud" : (PROVIDERS[k] ? PROVIDERS[k].name : k)); }
+    function renderSavedKeys() {
+      const box = $("savedKeys");
+      if (!box) return;
+      const en = S.uiLang === "en";
+      const ks = Object.keys(S.keys).filter(function (k) { return S.keys[k]; });
+      if (!ks.length) { box.hidden = true; box.replaceChildren(); return; }
+      const kids = [el("div", { class: "sk-title", text: (en ? "Saved keys (" : "已保存的 Key（") + ks.length + (en ? "): all of them join the answer race; " : "）：都会参与抢答；") +
+        ($("chkRememberKey").checked ? (en ? "remembered on this device, encrypted." : "已加密记住在这个浏览器。") : (en ? "cleared when you close the tab unless you tick Remember." : "不勾选「记住」的话，关闭页面就会清除。")) })];
+      ks.forEach(function (k) {
+        const row = el("div", { class: "sk-row" },
+          el("span", { class: "sk-name", text: keyName(k) }),
+          el("span", { class: "sk-mask", text: maskKey(S.keys[k]) + (k === "groq" ? " · " + PROVIDERS.groq.model : "") }));
+        if (PROVIDERS[k] && S.provider === k) row.appendChild(el("span", { class: "tag", text: en ? "main" : "主模型" }));
+        else if (PROVIDERS[k]) row.appendChild(el("button", { class: "chip", type: "button", text: en ? "Make main" : "设为主模型", onclick: function () { selectProvider(k); } }));
+        row.appendChild(el("button", { class: "chip", type: "button", text: en ? "Remove" : "删除", onclick: function () { removeKey(k); } }));
+        kids.push(row);
+      });
+      box.replaceChildren.apply(box, kids);
+      box.hidden = false;
+    }
+    function removeKey(k) {
+      S.keys[k] = "";
+      if (S.provider === k) {
+        const next = Object.keys(PROVIDERS).find(function (p) { return S.keys[p]; });
+        if (next) { S.provider = next; S.model = PROVIDERS[next].model; }
+      }
+      if ($("chkRememberKey").checked) {
+        if (Object.keys(savedKeys()).length) vaultSave().catch(function () {});
+        else vaultClear().catch(function () {});
+      }
+      renderProviders(); renderReady(); refreshStatus(); persistKb();
+      toast((S.uiLang === "en" ? "Removed " : "已删除 ") + keyName(k) + (S.uiLang === "en" ? " key." : " Key。"));
+    }
+    // The checkbox on the start screen and the one in Settings are the same switch.
+    $("chkRememberKey2").addEventListener("change", function () {
+      $("chkRememberKey").checked = this.checked;
+      $("chkRememberKey").dispatchEvent(new Event("change"));
+    });
+    $("chkRememberKey").addEventListener("change", function () { $("chkRememberKey2").checked = this.checked; renderProviders(); });
+    let rememberHinted = false;
+    function hintRemember() {
+      if (rememberHinted || $("chkRememberKey").checked) return;
+      rememberHinted = true;
+      setTimeout(function () {
+        toast(S.uiLang === "en" ? "Tip: tick “Remember my keys” to keep all your keys on this device (encrypted); otherwise they're gone when you close the tab."
+          : "提示：勾选「记住我的 Key」，所有 Key 会加密保存在这个浏览器；不勾选的话关闭页面就没了。", 7000);
+      }, 4200);
+    }
+
+    // Groq retires models often: list what this key can use and pick the best chat model.
+    const GROQ_PREFS = ["llama-3.3-70b-versatile", "openai/gpt-oss-120b", "meta-llama/llama-4-maverick-17b-128e-instruct", "moonshotai/kimi-k2-instruct", "llama-3.1-8b-instant"];
+    async function groqPickModel(k, sig) {
+      const r = await fetch(cloudUrl("https://api.groq.com/openai/v1/models"), { headers: { "Authorization": "Bearer " + k }, signal: sig || timeoutSignal(8000) });
+      if (!r.ok) return false;
+      try {
+        const ids = ((await r.json()).data || []).map(function (m) { return m.id; });
+        const pick = GROQ_PREFS.find(function (m) { return ids.indexOf(m) !== -1; }) ||
+          ids.find(function (id) { return /llama|gpt-oss|qwen|kimi/i.test(id) && !/whisper|guard|tts|vision/i.test(id); });
+        if (pick) {
+          PROVIDERS.groq.model = pick;
+          if (S.provider === "groq" && (!S.model || ids.indexOf(S.model) === -1)) S.model = pick;
+        }
+      } catch (_) {}
+      return true;
+    }
+
     // =====================================================================
     // 15a. Cue Brief: one Markdown file an agent writes, Cue imports in one step
     // =====================================================================
@@ -7400,6 +7487,10 @@
       ["正在评估…", "Evaluating…"], ["评估失败：", "Evaluation failed: "], ["得分 ", "Score "], ["已评估", "Evaluated"],
       ["这个浏览器不支持语音识别：请在设置里填 Gemini Key，或直接打字。", "This browser has no speech recognition: add a Gemini key in Settings, or type."],
       ["练习 · ", "Practice · "],
+      ["极快的开源模型（Llama / GPT-OSS），可参与抢答", "Very fast open models (Llama / GPT-OSS); joins the race"], ["极快", "Fastest"], ["新", "New"],
+      ["以 gsk_ 开头，在 console.groq.com 获取。", "Starts with gsk_; get one at console.groq.com."],
+      ["记住我的 Key（加密保存在这个浏览器）", "Remember my keys (encrypted, in this browser)"],
+      ["Key 已加密保存在这个浏览器里。", "Keys are saved in this browser, encrypted."],
       ["检查资料缺口", "Check for gaps"], ["预测对方会问什么，用现场同样的检索方式查你的资料，找出答不上来的问题", "Predict what they'll ask, search your materials the same way Cue does live, and list the questions you can't answer yet"],
       ["你补充过这道题", "You added an answer for this"], ["检查缺口需要先设置 AI 模型。", "Set up an AI model to check for gaps."],
       ["先导入 Brief、放点资料，或填「对方是谁 / 聊什么」。", "Import a brief, add materials, or fill in who / what first."],
@@ -7431,7 +7522,7 @@
       ["已载入内置提示词：改完后会替换内置提示词。", "Built-in prompt loaded: once edited, it replaces the built-in one."],
       ["已恢复默认提示词。", "Prompt reset to default."], ["调试包请在主窗口打开。", "Open the debug bundle from the main window."],
       ["已选中，请按 Ctrl/⌘+C 复制。", "Selected: press Ctrl/⌘+C to copy."], ["先问一个问题，再来重答。", "Ask a question first, then re-answer."],
-      ["支持 Gemini、OpenAI、Claude、Deepgram（英文转写）、硅基流动、DeepSeek、智谱、通义千问，粘贴后自动识别。", "Works with Gemini, OpenAI, Claude, Deepgram (English transcription), SiliconFlow, DeepSeek, Zhipu and Qwen; detected automatically."],
+      ["支持 Gemini、OpenAI、Claude、Groq、Deepgram（英文转写）、硅基流动、DeepSeek、智谱、通义千问，可以同时保存多个，粘贴后自动识别。", "Works with Gemini, OpenAI, Claude, Groq, Deepgram (English transcription), SiliconFlow, DeepSeek, Zhipu and Qwen. Save as many as you like; each is detected automatically."],
       ["Deepgram Nova-3 实时转写（英文，最快）", "Deepgram Nova-3 streaming (English, fastest)"],
       ["Deepgram 连不上，已改用浏览器识别。", "Deepgram unavailable; switched to the browser recognizer."],
       ["回答", "Answer"],
@@ -7529,7 +7620,7 @@
       ["开始收音", "Start listening"],
       ["只用麦克风，不会共享屏幕。戴耳机开线上会议时，开始后点顶部的「＋ 会议声音」，让 Cue 也听到对方。", "Uses only your microphone, no screen sharing. On a call with headphones, tap “+ Meeting audio” at the top after starting so Cue can hear them too."],
       ["AI Key", "AI key"], ["粘贴一个 API Key，自动识别是哪家服务", "Paste an API key; Cue detects the provider"],
-      ["粘贴 Gemini / 硅基流动 / DeepSeek / 智谱 / 通义 Key", "Paste a Gemini / OpenAI / Claude / Deepgram / DeepSeek key"],
+      ["粘贴 Gemini / OpenAI / Claude / Groq / Deepgram Key", "Paste a Gemini / OpenAI / Claude / Groq / Deepgram key"],
       ["声音", "Audio"], ["会议声音", "Meeting audio"], ["更多", "More"], ["导出 Markdown", "Export Markdown"],
       ["把会议标签页的声音也给 Cue，分清谁在说话（只取声音，不看画面）", "Give Cue the meeting tab's sound so it can tell who's talking (audio only, no video)"],
       ["点「开始收音」后，大家说的话会实时出现在这里。", "After you tap Start listening, what everyone says appears here in real time."],
