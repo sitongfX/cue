@@ -498,6 +498,18 @@
     .brief-out b { color: var(--text); font-weight: 600; }
     .brief-out ul { margin: 4px 0 0 18px; }
     .brief-out .warn { color: var(--warn, #e0a030); }
+      .gap-out { margin-top: 12px; display: grid; gap: 8px; }
+    .gap-sum { font-size: 13px; color: var(--text-2); }
+    .gap-sum b { color: var(--text); }
+    .gap-row { border: 1px solid var(--line-2); border-radius: 12px; padding: 10px 12px; display: grid; gap: 6px; }
+    .gap-row .gq { font-size: 14px; color: var(--text); }
+    .gap-row .gm { font-size: 12.5px; color: var(--text-2); }
+    .gap-tag { display: inline-block; font-size: 11.5px; padding: 1px 8px; border-radius: 999px; margin-right: 6px; border: 1px solid var(--line-2); }
+    .gap-tag.missing { color: #ff8a80; border-color: rgba(255, 138, 128, .45); }
+    .gap-tag.partial { color: #e0b050; border-color: rgba(224, 176, 80, .45); }
+    .gap-tag.ok { color: #9ccc65; border-color: rgba(156, 204, 101, .45); }
+    .gap-fill { display: flex; gap: 6px; }
+    .gap-fill .input { flex: 1; }
   </style>
 </head>
 <body data-view="live" data-pane="stage">
@@ -752,8 +764,10 @@
               <button class="btn btn-primary" id="btnBriefImport" type="button">导入</button>
               <button class="btn" id="btnBriefTidy" type="button">让 Cue 整理后导入</button>
               <button class="btn btn-ghost" id="btnBriefUndo" type="button" hidden>撤销导入</button>
+              <button class="btn" id="btnGaps" type="button" title="预测对方会问什么，用现场同样的检索方式查你的资料，找出答不上来的问题">检查资料缺口</button>
             </div>
             <div class="brief-out" id="briefOut" hidden></div>
+            <div class="gap-out" id="gapOut" hidden></div>
           </div>
 
           <div class="card">
@@ -1840,6 +1854,7 @@
       if (name === "预演 · 可能被问的问题") return "Rehearsal · likely questions";
       if (name.indexOf("复盘 · ") === 0) return "Review · " + name.slice(5);
       if (name === BRIEF_QA) return "Brief · likely questions";
+      if (name === FILL_DOC) return "Added · my answers";
       if (name === BRIEF_FACTS) return "Brief · key facts";
       return name;
     }
@@ -3393,6 +3408,7 @@
       if (hits.some(function (h) { return h.doc === MEMORY_DOC; })) return "你上次是这么答的";
       if (hits.some(function (h) { return h.doc === PREP_DOC; })) return "你演练过这道题";
       if (hits.some(function (h) { return h.doc === BRIEF_QA; })) return "你的 Brief 里准备过";
+      if (hits.some(function (h) { return h.doc === FILL_DOC; })) return "你补充过这道题";
       if (hits.some(function (h) { return h.doc.indexOf("复盘") === 0; })) return "你复盘过类似的问题";
       return "来自你的资料";
     }
@@ -6734,6 +6750,7 @@
       if (b.hide.length) parts.push(b.hide.length + (en ? " words to hide" : " 个隐去词"));
       const kids = [el("div", null, el("b", { text: en ? "Imported: " : "已导入：" }), document.createTextNode(parts.join(en ? ", " : "、") || (en ? "nothing recognisable" : "没有可识别的内容")))];
       if (b.qa.length) kids.push(el("div", { text: en ? "When one of these questions comes up, your prepared answer shows instantly." : "现场被问到这些问题时，你准备好的回答会立刻显示。" }));
+      kids.push(el("div", null, el("button", { class: "chip", type: "button", text: en ? "Check for gaps now" : "现在检查资料缺口", onclick: function () { runGapCheck(); } })));
       if (b.verify) kids.push(el("div", { class: "warn", text: (en ? "⚠ " + b.verify + " item(s) marked (verify): check them before the call." : "⚠ 有 " + b.verify + " 处标了 (verify)，开会前核实一下。") }));
       if (b.open.length) {
         kids.push(el("div", null, el("b", { text: en ? "Find out before the call:" : "开会前最好确认：" })));
@@ -6757,24 +6774,28 @@
     // Messy notes (emails, invite, docs) → a brief, written by the model, then imported.
     const BRIEF_SYS = "You turn my messy notes into a Cue Brief for a live conversation. Output ONLY the brief, in exactly this Markdown structure:\n\n" +
       BRIEF_TEMPLATE + "\n\n" + BRIEF_RULES + "\n- Use only information in my notes; never invent facts. If the notes imply likely questions, write 8-15 Q/A pairs answered from the notes.";
+    // Prep-time jobs (not latency-critical): the stronger Gemini model when available, with room for long output.
+    async function llmLong(sys, user, maxTok, onDelta) {
+      const ctl = new AbortController();
+      MAXTOK.v = maxTok || 4000;
+      try {
+        const c = S.keys.gemini ? { provider: "gemini", model: "gemini-3-flash-preview", key: "gemini:gemini-3-flash-preview" } : null;
+        if (c) await streamOne(c, sys, user, ctl.signal, onDelta);
+        else await streamAnswer(sys, user, ctl.signal, onDelta);
+      } finally { MAXTOK.v = 900; }
+    }
     async function briefFromRaw(raw) {
       if (!aiReady()) { toast("整理需要先设置 AI 模型。"); openDrawer("model"); return; }
       const btn = $("btnBriefTidy");
       btn.disabled = true; btn.textContent = S.uiLang === "en" ? "Tidying…" : "整理中…";
-      const ctl = new AbortController();
       let out = "";
-      MAXTOK.v = 8000;
       try {
-        const c = S.keys.gemini ? { provider: "gemini", model: "gemini-3-flash-preview", key: "gemini:gemini-3-flash-preview" } : null;
         const user = (ctxBlock() ? ctxBlock() + "\n\n" : "") + "[My notes]\n" + String(raw).slice(0, 60000);
-        const onDelta = function (d) { out += d; $("briefInput").value = out; };
-        if (c) await streamOne(c, BRIEF_SYS, user, ctl.signal, onDelta);
-        else await streamAnswer(BRIEF_SYS, user, ctl.signal, onDelta);
+        await llmLong(BRIEF_SYS, user, 8000, function (d) { out += d; $("briefInput").value = out; });
         if (!importBriefText(out)) toast(S.uiLang === "en" ? "Couldn't turn that into a brief. Try adding headings." : "没能整理成 Brief，可以加几个标题再试。");
       } catch (e) {
         toast((S.uiLang === "en" ? "Tidy failed: " : "整理失败：") + errMsg(e));
       } finally {
-        MAXTOK.v = 900;
         btn.disabled = false; btn.textContent = S.uiLang === "en" ? "Tidy with Cue, then import" : "让 Cue 整理后导入";
       }
     }
@@ -6905,6 +6926,152 @@
       try { history.replaceState(null, "", location.pathname + location.search); } catch (_) {}
     }
     setTimeout(checkHashBrief, 700);
+
+    // =====================================================================
+    // 15a2. Gap check: which likely questions can't my materials answer?
+    // Questions are predicted by the model, then looked up with the SAME retrieval used live,
+    // then judged on the passages that retrieval actually returned, so a miss here is a miss on the call.
+    // =====================================================================
+    const FILL_DOC = "补充 · 我写的回答";
+    function gapLang() { return contentLang(materialsText(4000) + " " + $("ctxWho").value + " " + $("ctxTopic").value); }
+    function parseGapQuestions(text) {
+      const seen = [];
+      String(text || "").split("\n").forEach(function (l) {
+        const q = l.replace(/^\s*(?:[-*•]|\d+[.)、:：]|Q\d*[:：])\s*/i, "").replace(/\*\*/g, "").trim();
+        if (q.length >= 6 && q.length <= 240 && !seen.some(function (x) { return sameQuestion(x, q); })) seen.push(q);
+      });
+      return seen.slice(0, 12);
+    }
+    function parseGapVerdicts(text, n) {
+      const out = [];
+      String(text || "").split("\n").forEach(function (l) {
+        const m = l.replace(/\*\*/g, "").match(/^\s*Q?(\d+)\s*[|｜]\s*(ok|partial|missing)\s*[|｜]\s*(.*)$/i);
+        if (!m) return;
+        const i = parseInt(m[1], 10) - 1;
+        if (i >= 0 && i < n && !out[i]) out[i] = { status: m[2].toLowerCase(), missing: m[3].trim().replace(/^-$/, "") };
+      });
+      return out;
+    }
+    async function runGapCheck() {
+      if (!aiReady()) { toast(S.uiLang === "en" ? "Set up an AI model to check for gaps." : "检查缺口需要先设置 AI 模型。"); openDrawer("model"); return; }
+      const mats = materialsDigest(8000);
+      if (!mats && !ctxBlock()) { toast(S.uiLang === "en" ? "Add materials or fill in who / what first." : "先导入 Brief、放点资料，或填「对方是谁 / 聊什么」。"); return; }
+      const en = S.uiLang === "en", lang = langName(gapLang());
+      const btn = $("btnGaps");
+      btn.disabled = true;
+      const step = function (t) { btn.textContent = t; };
+      try {
+        // 1) What will they ask?
+        step(en ? "Predicting questions…" : "预测问题…");
+        let qtext = "";
+        const scen = $("scenarioSel").options[$("scenarioSel").selectedIndex].textContent;
+        await llmLong("You predict what the other side will ask me in an upcoming conversation (scenario: " + scen + "). " +
+          "Output exactly 12 questions, one per line, no numbering, no other text, most likely first: 4 basic ones, 5 specific to their situation and goals, 3 tough or skeptical ones. " +
+          "Ask what they would really ask, in their words. Write the questions in " + lang + ".",
+          (ctxBlock() ? ctxBlock() + "\n\n" : "") + (mats ? "[My materials, for context]\n" + mats : "[No materials yet]"), 1500,
+          function (d) { qtext += d; });
+        const qs = parseGapQuestions(qtext);
+        if (!qs.length) throw new Error(en ? "no questions came back" : "没有生成问题");
+        // 2) Look each one up exactly the way the live answer would.
+        step(en ? "Searching your materials…" : "查找资料…");
+        if (semUsable() && S.chunks.length) {
+          try {
+            const vs = await embedTexts(qs, "RETRIEVAL_QUERY");
+            qs.forEach(function (q, i) { if (vs[i]) { const p = Promise.resolve(vs[i]); p.vec = vs[i]; SEM.q.set(normQ(q), p); } });
+          } catch (_) { /* keyword search still works */ }
+        }
+        const rows = qs.map(function (q) { return { q: q, hits: S.chunks.length ? smartRetrieve(q, 3) : [] }; });
+        // 3) Can those passages answer it, with specifics?
+        step(en ? "Checking answers…" : "判断能否回答…");
+        let vtext = "";
+        const block = rows.map(function (r, i) {
+          return "Q" + (i + 1) + ": " + r.q + "\nPassages:\n" + (r.hits.length ? r.hits.map(function (h, j) {
+            return "[" + String.fromCharCode(97 + j) + "] (" + h.doc + ") " + h.text.slice(0, 500);
+          }).join("\n") : "(none found)");
+        }).join("\n\n");
+        await llmLong("You check whether the passages found for each question let me answer it live, with specifics. " +
+          "For each question output exactly one line: `<n> | ok|partial|missing | <what's missing>`. " +
+          "ok = the passages contain the specific facts needed (numbers, names, dates, steps, examples); partial = related but key specifics are missing; missing = the passages don't address it. " +
+          "Judge only from the passages shown, not general knowledge. For partial/missing, name exactly what fact I need, max 15 words, in " + lang + "; for ok write -. No other text.",
+          block, 1500, function (d) { vtext += d; });
+        const vs = parseGapVerdicts(vtext, rows.length);
+        rows.forEach(function (r, i) { const v = vs[i] || { status: "partial", missing: "" }; r.status = v.status; r.missing = v.missing; });
+        S.gaps = rows;
+        renderGaps();
+      } catch (e) {
+        toast((en ? "Gap check failed: " : "缺口检查失败：") + errMsg(e));
+      } finally {
+        btn.disabled = false;
+        btn.textContent = en ? "Check for gaps" : "检查资料缺口";
+      }
+    }
+
+    function saveGapFill(r, text) {
+      const t = String(text || "").trim();
+      if (!t) return false;
+      const old = (S.docs.find(function (d) { return d.name === FILL_DOC; }) || { text: "" }).text;
+      addDoc(FILL_DOC, (old ? old + "\n\n" : "") + "Q: " + r.q + "\nA: " + t);
+      r.status = "ok"; r.missing = ""; r.filled = true;
+      return true;
+    }
+    function gapAgentPrompt() {
+      const open = (S.gaps || []).filter(function (r) { return r.status !== "ok"; });
+      return [
+        "My Cue Brief (below) can't answer these questions the other side is likely to ask in my upcoming conversation:",
+        open.map(function (r, i) { return (i + 1) + ". " + r.q + (r.missing ? "  (missing: " + r.missing + ")" : ""); }).join("\n"),
+        "",
+        "Find the answers in my sources. Return the FULL updated Cue Brief in the same Markdown structure, in one code block:",
+        "- add each question to Likely questions with a first-person spoken answer that contains the specific facts;",
+        "- add those facts to Key facts, one per line;",
+        "- anything you can't find goes under Open questions (what I need to find out, and from whom). Never invent facts.",
+        "",
+        "[Current Cue Brief]", "```markdown", exportBrief(), "```",
+        "",
+        "My sources:", "[paste or attach them here]"
+      ].join("\n");
+    }
+
+    function renderGaps() {
+      const out = $("gapOut"), rows = S.gaps || [];
+      const en = S.uiLang === "en";
+      if (!rows.length) { out.hidden = true; return; }
+      const n = { ok: 0, partial: 0, missing: 0 };
+      rows.forEach(function (r) { n[r.status] = (n[r.status] || 0) + 1; });
+      const label = { ok: en ? "Covered" : "能答", partial: en ? "Partly" : "不完整", missing: en ? "Missing" : "答不上" };
+      const kids = [];
+      kids.push(el("div", { class: "gap-sum" },
+        el("b", { text: en ? "Of " + rows.length + " likely questions: " : rows.length + " 个可能被问的问题里：" }),
+        document.createTextNode(en ? n.ok + " covered, " + n.partial + " partly, " + n.missing + " missing." : n.ok + " 个能答，" + n.partial + " 个不完整，" + n.missing + " 个答不上。")));
+      const open = rows.filter(function (r) { return r.status !== "ok"; });
+      if (open.length) {
+        kids.push(el("div", { class: "row", style: "gap: 6px;" },
+          el("button", { class: "btn btn-primary", type: "button", text: en ? "Copy gaps for your agent" : "把缺口复制给 Agent", onclick: function () {
+            copyText(gapAgentPrompt(), en ? "Copied: send it to your agent with your sources, then paste the updated brief back and Import." : "已复制：连同资料发给 Agent，再把更新后的 Brief 贴回来导入。");
+          } }),
+          el("button", { class: "btn", type: "button", text: en ? "Check again" : "重新检查", onclick: function () { runGapCheck(); } })));
+      }
+      const order = { missing: 0, partial: 1, ok: 2 };
+      rows.slice().sort(function (a, b) { return order[a.status] - order[b.status]; }).forEach(function (r) {
+        const row = el("div", { class: "gap-row" },
+          el("div", { class: "gq" }, el("span", { class: "gap-tag " + r.status, text: r.filled ? (en ? "Added" : "已补充") : label[r.status] }), document.createTextNode(r.q)));
+        if (r.missing) row.appendChild(el("div", { class: "gm", text: (en ? "Need: " : "缺：") + r.missing }));
+        if (r.hits && r.hits.length && r.status !== "missing") {
+          row.appendChild(el("div", { class: "gm", text: (en ? "Found in: " : "来自：") + Array.from(new Set(r.hits.map(function (h) { return docLabel(h.doc); }))).join(" · ") }));
+        }
+        if (r.status !== "ok") {
+          const inp = el("input", { class: "input", type: "text", placeholder: en ? "Type the answer you'd give (facts and numbers)…" : "写下你会怎么答（带上事实和数字）…" });
+          const save = function () {
+            if (saveGapFill(r, inp.value)) { toast(en ? "Saved: this answer will show when they ask." : "已保存：对方问到时会直接显示。"); renderGaps(); }
+          };
+          inp.addEventListener("keydown", function (e) { if (e.key === "Enter") save(); });
+          row.appendChild(el("div", { class: "gap-fill" }, inp, el("button", { class: "btn", type: "button", text: en ? "Save" : "保存", onclick: save })));
+        }
+        kids.push(row);
+      });
+      out.replaceChildren.apply(out, kids);
+      out.hidden = false;
+    }
+    $("btnGaps").addEventListener("click", function () { runGapCheck(); });
 
     // =====================================================================
     // 15b. My own prompt, re-answer, and the debug bundle
@@ -7233,6 +7400,9 @@
       ["正在评估…", "Evaluating…"], ["评估失败：", "Evaluation failed: "], ["得分 ", "Score "], ["已评估", "Evaluated"],
       ["这个浏览器不支持语音识别：请在设置里填 Gemini Key，或直接打字。", "This browser has no speech recognition: add a Gemini key in Settings, or type."],
       ["练习 · ", "Practice · "],
+      ["检查资料缺口", "Check for gaps"], ["预测对方会问什么，用现场同样的检索方式查你的资料，找出答不上来的问题", "Predict what they'll ask, search your materials the same way Cue does live, and list the questions you can't answer yet"],
+      ["你补充过这道题", "You added an answer for this"], ["检查缺口需要先设置 AI 模型。", "Set up an AI model to check for gaps."],
+      ["先导入 Brief、放点资料，或填「对方是谁 / 聊什么」。", "Import a brief, add materials, or fill in who / what first."],
       ["用 Agent 一键准备（推荐）", "Prepare with your agent (recommended)"], ["插入格式模板", "Insert template"],
       ["① 复制提示词给你的 Agent（Gemini、Jetski、ChatGPT…），附上会议邀请、邮件、文档和笔记。② 把它生成的 Markdown 粘贴到下面，点「导入」：场合、对方、关于我、我的要求、可能被问的问题、关键事实和资料一次填好。也可以直接粘贴杂乱的笔记，Cue 会自己整理。",
         "1) Copy the prompt to your agent (Gemini, Jetski, ChatGPT…) together with the meeting invite, emails, docs and notes. 2) Paste the Markdown it writes below and tap Import: scenario, who, about me, your instructions, likely questions, key facts and materials are filled in at once. You can also paste messy notes and Cue will structure them."],
